@@ -323,10 +323,10 @@ ShowSettings:
     ; 界面选项卡
     Gui, Settings: Tab, 界面
     Gui, Settings: Add, Text, x20 y40, 窗口宽度:
-    Gui, Settings: Add, Edit, x100 y36 w50 vGuiWidth, %GuiWidth%
+    Gui, Settings: Add, Edit, x100 y36 w50 vGuiWidth +Number, %GuiWidth%
     Gui, Settings: Add, UpDown, vGuiWidthUD Range80-300, %GuiWidth%
     Gui, Settings: Add, Text, x180 y40, 窗口高度:
-    Gui, Settings: Add, Edit, x250 y36 w50 vGuiHeight, %GuiHeight%
+    Gui, Settings: Add, Edit, x250 y36 w50 vGuiHeight +Number, %GuiHeight%
     Gui, Settings: Add, UpDown, vGuiHeightUD Range30-100, %GuiHeight%
     
     Gui, Settings: Add, Text, x20 y70, 字体名称:
@@ -382,7 +382,7 @@ ShowSettings:
 
     ; 背景透明度（0-255）
     Gui, Settings: Add, Text, x20 y190, 背景透明度 (0-255):
-    Gui, Settings: Add, Edit, x150 y186 w50 vBgTransparency, %BgTransparency%
+    Gui, Settings: Add, Edit, x150 y186 w50 vBgTransparency +Number, %BgTransparency%
     Gui, Settings: Add, UpDown, vBgTransparencyUD Range0-255, %BgTransparency%
     Gui, Settings: Add, Text, x210 y190, (0=完全透明，255=完全不透明)
 
@@ -407,12 +407,12 @@ ShowSettings:
     GuiControl, Settings:, LimitOffset, %LimitOffset%
     
     Gui, Settings: Add, Text, x20 y70, 横向偏移:
-    Gui, Settings: Add, Edit, x150 y66 w50 vOffsetX, %OffsetX%
+    Gui, Settings: Add, Edit, x150 y66 w50 vOffsetX +Number, %OffsetX%
     Gui, Settings: Add, UpDown, vOffsetXUD Range-1000-1000, %OffsetX%
     Gui, Settings: Add, Text, x210 y70, (正数向右，负数向左)
     
     Gui, Settings: Add, Text, x20 y100, 纵向偏移:
-    Gui, Settings: Add, Edit, x150 y96 w50 vOffsetY, %OffsetY%
+    Gui, Settings: Add, Edit, x150 y96 w50 vOffsetY +Number, %OffsetY%
     Gui, Settings: Add, UpDown, vOffsetYUD Range-200-200, %OffsetY%
     Gui, Settings: Add, Text, x210 y100, (正数向上，负数向下)
     
@@ -423,15 +423,15 @@ ShowSettings:
     ; 网速阈值选项卡
     Gui, Settings: Tab, 网速阈值
     Gui, Settings: Add, Text, x20 y40, 很低速阈值 (KB/s):
-    Gui, Settings: Add, Edit, x150 y36 w60 vThresh1KB, % Round(Thresh1/1024)
+    Gui, Settings: Add, Edit, x150 y36 w60 vThresh1KB +Number, % Round(Thresh1/1024)
     Gui, Settings: Add, UpDown, vThresh1KBUD Range1-1000, % Round(Thresh1/1024)
     
     Gui, Settings: Add, Text, x20 y70, 低速阈值 (KB/s):
-    Gui, Settings: Add, Edit, x150 y66 w60 vThresh2KB, % Round(Thresh2/1024)
+    Gui, Settings: Add, Edit, x150 y66 w60 vThresh2KB +Number, % Round(Thresh2/1024)
     Gui, Settings: Add, UpDown, vThresh2KBUD Range1-5000, % Round(Thresh2/1024)
     
     Gui, Settings: Add, Text, x20 y100, 中速阈值 (MB/s):
-    Gui, Settings: Add, Edit, x150 y96 w60 vThresh3MB, % Round(Thresh3/1024/1024)
+    Gui, Settings: Add, Edit, x150 y96 w60 vThresh3MB +Number, % Round(Thresh3/1024/1024)
     Gui, Settings: Add, UpDown, vThresh3MBUD Range1-100, % Round(Thresh3/1024/1024)
     
     ; 颜色选项卡
@@ -465,7 +465,7 @@ ShowSettings:
     Gui, Settings: Add, Edit, x150 y66 w80 vEMAFactor, %EMAFactor%
     
     Gui, Settings: Add, Text, x20 y100, 防抖确认次数:
-    Gui, Settings: Add, Edit, x150 y96 w50 vConfirmNeeded, %ConfirmNeeded%
+    Gui, Settings: Add, Edit, x150 y96 w50 vConfirmNeeded +Number, %ConfirmNeeded%
     Gui, Settings: Add, UpDown, vConfirmNeededUD Range1-10, %ConfirmNeeded%
 
     ;保存/取消/恢复默认 按钮
