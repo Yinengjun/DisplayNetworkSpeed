@@ -407,14 +407,14 @@ ShowSettings:
     GuiControl, Settings:, LimitOffset, %LimitOffset%
     
     Gui, Settings: Add, Text, x20 y70, 横向偏移:
-    Gui, Settings: Add, Edit, x150 y66 w50 vOffsetX +Number, %OffsetX%
+    Gui, Settings: Add, Edit, x100 y66 w60 vOffsetX +Number, %OffsetX%
     Gui, Settings: Add, UpDown, vOffsetXUD Range-1000-1000, %OffsetX%
-    Gui, Settings: Add, Text, x210 y70, (正数向右，负数向左)
+    Gui, Settings: Add, Text, x170 y70, (正数向右，负数向左)
     
     Gui, Settings: Add, Text, x20 y100, 纵向偏移:
-    Gui, Settings: Add, Edit, x150 y96 w50 vOffsetY +Number, %OffsetY%
+    Gui, Settings: Add, Edit, x100 y96 w60 vOffsetY +Number, %OffsetY%
     Gui, Settings: Add, UpDown, vOffsetYUD Range-200-200, %OffsetY%
-    Gui, Settings: Add, Text, x210 y100, (正数向上，负数向下)
+    Gui, Settings: Add, Text, x170 y100, (正数向上，负数向下)
     
     Gui, Settings: Add, Checkbox, x20 y130 vDragPositioning gDragPositioningChanged, 启用拖动定位
     GuiControl, Settings:, DragPositioning, %DragPositioning%
