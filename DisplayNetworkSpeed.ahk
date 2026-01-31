@@ -42,7 +42,7 @@ DefaultColorVeryLow := "CFCFCF"          ; 很低速颜色 灰色（6位16进制
 DefaultColorLow := "A8D5A2"              ; 低速颜色 浅绿
 DefaultColorMed := "7FD3D6"              ; 中速颜色 青色
 DefaultColorHigh := "F2C08C"             ; 高速颜色 橙色
-DefaultEnableSmoothing := false           ; 是否启用平滑处理（EMA）
+DefaultEnableSmoothing := true           ; 是否启用平滑处理（EMA）
 DefaultEMAFactor := 0.35                 ; EMA 指数平滑因子，用于平滑网速显示
 DefaultConfirmNeeded := 2                ; 防抖确认次数：同一颜色连续出现多少次才真正更新
 DefaultAutoRestart := false              ; 保存后自动重启无需二次确认
@@ -466,15 +466,17 @@ ShowSettings:
     
     ; 高级选项卡
     Gui, Settings: Tab, 高级
-    Gui, Settings: Add, Checkbox, x20 y40 vEnableSmoothing, 启用平滑处理
+    Gui, Settings: Add, Checkbox, x20 y40 vEnableSmoothing, 平滑处理
     GuiControl, Settings:, EnableSmoothing, %EnableSmoothing%
     
     Gui, Settings: Add, Text, x20 y70, EMA 平滑因子 (0-1):
-    Gui, Settings: Add, Edit, x150 y66 w80 vEMAFactor, %EMAFactor%
+    Gui, Settings: Add, Edit, x150 y66 w50 vEMAFactor, %EMAFactor%
+    Gui, Settings: Add, Text, x210 y70, （若启用平滑处理推荐0.35）
     
     Gui, Settings: Add, Text, x20 y100, 防抖确认次数:
     Gui, Settings: Add, Edit, x150 y96 w50 vConfirmNeeded +Number, %ConfirmNeeded%
     Gui, Settings: Add, UpDown, vConfirmNeededUD Range1-10, %ConfirmNeeded%
+    Gui, Settings: Add, Text, x210 y100, （颜色更新需连续出现几次）
 
     Gui, Settings: Add, Checkbox, x20 y130 vAutoStart gAutoStartChanged, 开机自启动
     GuiControl, Settings:, AutoStart, %AutoStart%
