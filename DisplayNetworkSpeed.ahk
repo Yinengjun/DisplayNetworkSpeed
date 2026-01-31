@@ -51,6 +51,8 @@ DefaultDisplayTarget := "主屏幕"         ; 显示器（主屏幕/显示器N/�
 DefaultEnsureTopmost := false            ; 是否开启确保置顶的定时重申
 DefaultTopmostReassertMin := 10           ; 重申置顶周期，单位：分钟（默认为 10 分钟）
 DefaultDragPositioning := false           ; 是否启用拖动定位
+DefaultAutoStart := false                 ; 开机自启动开关
+DefaultAutoStartScope := "当前用户"       ; 开机自启动范围：当前用户/所有用户
 
 ; ---------- 读取配置文件 ----------
 LoadConfig()
@@ -185,6 +187,9 @@ LoadConfig()
     IniRead, EnsureTopmost, %ConfigFile%, Advanced, EnsureTopmost, %DefaultEnsureTopmost%
     IniRead, TopmostReassertMin, %ConfigFile%, Advanced, TopmostReassertMin, %DefaultTopmostReassertMin%
     IniRead, DragPositioning, %ConfigFile%, Position, DragPositioning, %DefaultDragPositioning%
+    
+    IniRead, AutoStart, %ConfigFile%, General, AutoStart, %DefaultAutoStart%
+    IniRead, AutoStartScope, %ConfigFile%, General, AutoStartScope, %DefaultAutoStartScope%
 
     ; 清理数值中的逗号和空格，确保为纯数字，防止后续运算出错
     Interval := RegExReplace(Interval, "[,\s]", "")
@@ -270,6 +275,9 @@ CreateDefaultConfig()
     IniWrite, %DefaultEnsureTopmost%, %ConfigFile%, Advanced, EnsureTopmost
     IniWrite, %DefaultTopmostReassertMin%, %ConfigFile%, Advanced, TopmostReassertMin
     IniWrite, %DefaultDragPositioning%, %ConfigFile%, Position, DragPositioning
+    
+    IniWrite, %DefaultAutoStart%, %ConfigFile%, General, AutoStart
+    IniWrite, %DefaultAutoStartScope%, %ConfigFile%, General, AutoStartScope
 }
 
 ; ========================= 设置界面（设置窗口） =========================
@@ -468,6 +476,19 @@ ShowSettings:
     Gui, Settings: Add, Edit, x150 y96 w50 vConfirmNeeded +Number, %ConfirmNeeded%
     Gui, Settings: Add, UpDown, vConfirmNeededUD Range1-10, %ConfirmNeeded%
 
+    Gui, Settings: Add, Checkbox, x20 y130 vAutoStart gAutoStartChanged, 开机自启动
+    GuiControl, Settings:, AutoStart, %AutoStart%
+
+    Gui, Settings: Add, Text, x220 y130, 自启动范围:
+    Gui, Settings: Add, DropDownList, x300 y126 w100 vAutoStartScope, 当前用户|所有用户||
+    GuiControl, Settings: Choose, AutoStartScope, % (AutoStartScope = "当前用户") ? 1 : 2
+
+    ; 若未启用自启动，则禁用下拉菜单
+    if (!AutoStart)
+    {
+        GuiControl, Settings: Disable, AutoStartScope
+    }
+
     ;保存/取消/恢复默认 按钮
     Gui, Settings: Tab
     Gui, Settings: Add, Button, x200 y270 w60 h30 gSaveSettings, 保存
@@ -505,6 +526,19 @@ EnsureTopmostChanged:
     {
         GuiControl, Settings: Disable, TopmostReassertMin
         GuiControl, Settings: Disable, TopmostReassertMinUD
+    }
+Return
+
+; ---------- AutoStart 开关变化回调（设置窗口内） ----------
+AutoStartChanged:
+    Gui, Settings: Submit, NoHide
+    if (AutoStart)
+    {
+        GuiControl, Settings: Enable, AutoStartScope
+    }
+    else
+    {
+        GuiControl, Settings: Disable, AutoStartScope
     }
 Return
 
@@ -787,6 +821,39 @@ SaveSettings:
     IniWrite, %EnsureTopmost%, %ConfigFile%, Advanced, EnsureTopmost
     IniWrite, %TopmostReassertMin%, %ConfigFile%, Advanced, TopmostReassertMin
     IniWrite, %DragPositioning%, %ConfigFile%, Position, DragPositioning
+    
+    ; 处理开机自启动设置
+    oldAutoStart := 0
+    oldScope := ""
+    IniRead, oldAutoStart, %ConfigFile%, General, AutoStart, 0
+    IniRead, oldScope, %ConfigFile%, General, AutoStartScope, 当前用户
+    
+    IniWrite, %AutoStart%, %ConfigFile%, General, AutoStart
+    IniWrite, %AutoStartScope%, %ConfigFile%, General, AutoStartScope
+    
+    ; 处理快捷方式的创建和删除
+    if (AutoStart && !oldAutoStart)
+    {
+        ; 启用自启动
+        if (!CreateAutoStartShortcut(AutoStartScope))
+        {
+            MsgBox, 48, 提示, 创建开机自启动快捷方式失败，为所有用户创建需要以管理员身份运行程序。
+        }
+    }
+    else if (!AutoStart && oldAutoStart)
+    {
+        ; 禁用自启动
+        DeleteAutoStartShortcut(oldScope)
+    }
+    else if (AutoStart && oldAutoStart && AutoStartScope != oldScope)
+    {
+        ; 改变自启动范围
+        DeleteAutoStartShortcut(oldScope)
+        if (!CreateAutoStartShortcut(AutoStartScope))
+        {
+            MsgBox, 48, 提示, 更新开机自启动快捷方式失败，为所有用户更新需要以管理员身份运行程序。
+        }
+    }
     
     ; 根据AutoRestart设置决定是否确认重启
     if (AutoRestart)
@@ -1482,4 +1549,64 @@ SavePositionConfig()
     IniWrite, %OffsetX%, %ConfigFile%, Position, OffsetX
     IniWrite, %OffsetY%, %ConfigFile%, Position, OffsetY
     IniWrite, %LimitOffset%, %ConfigFile%, Position, LimitOffset
+}
+
+; ========================= 开机自启动功能实现 =========================
+
+; ---------- 创建开机自启动快捷方式 ----------
+CreateAutoStartShortcut(scope)
+{
+    if (scope = "当前用户")
+    {
+        startupFolder := A_AppData . "\Microsoft\Windows\Start Menu\Programs\Startup"
+    }
+    else ; 所有用户
+    {
+        startupFolder := "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup"
+    }
+    
+    shortcutPath := startupFolder . "\DisplayNetworkSpeed.lnk"
+    
+    ; 创建快捷方式
+    FileCreateShortcut, %A_ScriptFullPath%, %shortcutPath%
+    if ErrorLevel
+        return false
+    return true
+}
+
+; ---------- 删除开机自启动快捷方式 ----------
+DeleteAutoStartShortcut(scope)
+{
+    if (scope = "当前用户")
+    {
+        startupFolder := A_AppData . "\Microsoft\Windows\Start Menu\Programs\Startup"
+    }
+    else ; 所有用户
+    {
+        startupFolder := "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup"
+    }
+    
+    shortcutPath := startupFolder . "\DisplayNetworkSpeed.lnk"
+    
+    ; 删除快捷方式
+    FileDelete, %shortcutPath%
+    if ErrorLevel
+        return false
+    return true
+}
+
+; ---------- 检查快捷方式是否存在 ----------
+CheckAutoStartShortcut(scope)
+{
+    if (scope = "当前用户")
+    {
+        startupFolder := A_AppData . "\Microsoft\Windows\Start Menu\Programs\Startup"
+    }
+    else ; 所有用户
+    {
+        startupFolder := "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup"
+    }
+    
+    shortcutPath := startupFolder . "\DisplayNetworkSpeed.lnk"
+    return FileExist(shortcutPath)
 }
