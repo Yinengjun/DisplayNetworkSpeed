@@ -481,9 +481,12 @@ ShowSettings:
     Gui, Settings: Add, Checkbox, x20 y130 vAutoStart gAutoStartChanged, 开机自启动
     GuiControl, Settings:, AutoStart, %AutoStart%
 
-    Gui, Settings: Add, Text, x220 y130, 自启动范围:
-    Gui, Settings: Add, DropDownList, x300 y126 w100 vAutoStartScope, 当前用户|所有用户||
+    Gui, Settings: Add, Text, x160 y130, 范围:
+    Gui, Settings: Add, DropDownList, x200 y126 w90 vAutoStartScope, 当前用户|所有用户||
     GuiControl, Settings: Choose, AutoStartScope, % (AutoStartScope = "当前用户") ? 1 : 2
+
+    Gui, Settings: Add, Button, x300 y126 w45 h22 gOpenCurrentStartup, 当前
+    Gui, Settings: Add, Button, x350 y126 w45 h22 gOpenGlobalStartup, 全局
 
     ; 若未启用自启动，则禁用下拉菜单
     if (!AutoStart)
@@ -1612,3 +1615,13 @@ CheckAutoStartShortcut(scope)
     shortcutPath := startupFolder . "\DisplayNetworkSpeed.lnk"
     return FileExist(shortcutPath)
 }
+
+; ---------- 打开当前用户启动文件夹 ----------
+OpenCurrentStartup:
+    Run, explorer "%A_AppData%\Microsoft\Windows\Start Menu\Programs\Startup"
+Return
+
+; ---------- 打开全局启动文件夹 ----------
+OpenGlobalStartup:
+    Run, explorer "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup"
+Return
