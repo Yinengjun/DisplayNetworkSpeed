@@ -53,6 +53,9 @@ DefaultTopmostReassertMin := 10           ; 重申置顶周期，单位：分钟
 DefaultDragPositioning := false           ; 是否启用拖动定位
 DefaultAutoStart := false                 ; 开机自启动开关
 DefaultAutoStartScope := "当前用户"       ; 开机自启动范围：当前用户/所有用户
+DefaultShowLineMarkers := true             ; 显示上下行标志（默认开）
+DefaultLineMarkerStyle := "↑ ↓"           ; 上下行标志样式（默认↑ ↓）
+DefaultColorChangeWithValue := false       ; 标志随数值变色（默认关）
 
 ; ---------- 读取配置文件 ----------
 LoadConfig()
@@ -190,6 +193,11 @@ LoadConfig()
     
     IniRead, AutoStart, %ConfigFile%, General, AutoStart, %DefaultAutoStart%
     IniRead, AutoStartScope, %ConfigFile%, General, AutoStartScope, %DefaultAutoStartScope%
+    
+    IniRead, ShowLineMarkers, %ConfigFile%, GUI, ShowLineMarkers, %DefaultShowLineMarkers%
+    IniRead, LineMarkerStyle, %ConfigFile%, GUI, LineMarkerStyle, %DefaultLineMarkerStyle%
+    IniRead, ColorChangeWithValue, %ConfigFile%, GUI, ColorChangeWithValue, %DefaultColorChangeWithValue%
+    CombinedMode := ColorChangeWithValue && ShowLineMarkers
 
     ; 清理数值中的逗号和空格，确保为纯数字，防止后续运算出错
     Interval := RegExReplace(Interval, "[,\s]", "")
@@ -251,6 +259,9 @@ CreateDefaultConfig()
     IniWrite, %DefaultBgColor%, %ConfigFile%, GUI, BgColor
     IniWrite, %DefaultOnlyText%, %ConfigFile%, GUI, OnlyText
     IniWrite, %DefaultBgTransparency%, %ConfigFile%, GUI, BgTransparency
+    IniWrite, %DefaultShowLineMarkers%, %ConfigFile%, GUI, ShowLineMarkers
+    IniWrite, %DefaultLineMarkerStyle%, %ConfigFile%, GUI, LineMarkerStyle
+    IniWrite, %DefaultColorChangeWithValue%, %ConfigFile%, GUI, ColorChangeWithValue
     IniWrite, %DefaultNumRightMargin%, %ConfigFile%, GUI, NumRightMargin
     IniWrite, %DefaultArrowWidth%, %ConfigFile%, GUI, ArrowWidth
     IniWrite, %DefaultPositionCorner%, %ConfigFile%, Position, Corner
@@ -287,27 +298,27 @@ ShowSettings:
     ; 销毁旧的设置窗口（如果存在），防止重复创建
     Gui, Settings: Destroy
     
-    ; 创建设置窗口，使用 Tab3 控件分组（常规|界面|位置|网速阈值|颜色|高级）
-    Gui, Settings: Add, Tab3,, 常规|界面|位置|网速阈值|颜色|高级
+    ; 创建设置窗口，使用 Tab3 控件分组（常规|界面|行标|位置|网速阈值|颜色|高级）
+    Gui, Settings: Add, Tab3,, 常规|界面|行标|位置|网速阈值|颜色|高级
     
     ; 常规选项卡
     Gui, Settings: Tab, 常规
-    Gui, Settings: Add, Text, x20 y40, 刷新间隔 (毫秒):
+    Gui, Settings: Add, Text, x20 y50, 刷新间隔 (毫秒):
     IntervalClean := RegExReplace(Interval, "[^\d-]", "") ; 去掉千分位/空白等
     if (IntervalClean = "")
         IntervalClean := 1000
-    Gui, Settings: Add, Edit, x140 y36 w80 vInterval +Number, %IntervalClean%
+    Gui, Settings: Add, Edit, x140 y46 w80 vInterval +Number, %IntervalClean%
     Gui, Settings: Add, UpDown, vIntervalUD Range100-5000 +0x80, %IntervalClean% ; +0x80=UDS_NOTHOUSANDS
     
-    Gui, Settings: Add, Checkbox, x20 y70 vAutoRestart, 保存后重启不二次确认
+    Gui, Settings: Add, Checkbox, x20 y80 vAutoRestart, 保存后重启不二次确认
     GuiControl, Settings:, AutoRestart, %AutoRestart%
 
-    Gui, Settings: Add, Checkbox, x20 y100 vMouseThrough Checked%MouseThrough% gMouseThroughChanged, 鼠标穿透
+    Gui, Settings: Add, Checkbox, x20 y110 vMouseThrough Checked%MouseThrough% gMouseThroughChanged, 鼠标穿透
     GuiControl, Settings:, MouseThrough, %MouseThrough%
 
-    Gui, Settings: Add, Checkbox, x20 y130 vEnsureTopmost gEnsureTopmostChanged, 确保置顶
-    Gui, Settings: Add, Text, x220 y128, 重申周期（分钟）:
-    Gui, Settings: Add, Edit, x340 y124 w60 vTopmostReassertMin +Number, %TopmostReassertMin%
+    Gui, Settings: Add, Checkbox, x20 y140 vEnsureTopmost gEnsureTopmostChanged, 确保置顶
+    Gui, Settings: Add, Text, x220 y138, 重申周期（分钟）:
+    Gui, Settings: Add, Edit, x340 y134 w60 vTopmostReassertMin +Number, %TopmostReassertMin%
     Gui, Settings: Add, UpDown, vTopmostReassertMinUD Range1-1440, %TopmostReassertMin%
 
     GuiControl, Settings:, EnsureTopmost, %EnsureTopmost%
@@ -330,19 +341,19 @@ ShowSettings:
     
     ; 界面选项卡
     Gui, Settings: Tab, 界面
-    Gui, Settings: Add, Text, x20 y40, 窗口宽度:
-    Gui, Settings: Add, Edit, x100 y36 w50 vGuiWidth +Number, %GuiWidth%
+    Gui, Settings: Add, Text, x20 y50, 窗口宽度:
+    Gui, Settings: Add, Edit, x100 y46 w50 vGuiWidth +Number, %GuiWidth%
     Gui, Settings: Add, UpDown, vGuiWidthUD Range80-300, %GuiWidth%
-    Gui, Settings: Add, Text, x180 y40, 窗口高度:
-    Gui, Settings: Add, Edit, x250 y36 w50 vGuiHeight +Number, %GuiHeight%
+    Gui, Settings: Add, Text, x180 y50, 窗口高度:
+    Gui, Settings: Add, Edit, x250 y46 w50 vGuiHeight +Number, %GuiHeight%
     Gui, Settings: Add, UpDown, vGuiHeightUD Range30-100, %GuiHeight%
     
-    Gui, Settings: Add, Text, x20 y70, 字体名称:
+    Gui, Settings: Add, Text, x20 y80, 字体名称:
     ; 字体预设列表，方便用户选择常用字体或自定义
     fontPresetList := "Segoe UI Variable|Segoe UI|Microsoft YaHei|Consolas|Cascadia Mono|Cascadia Code|Sarasa Mono SC|SimHei|SimSun|Arial|Times New Roman|自定义"
-    Gui, Settings: Add, DropDownList, x100 y66 w160 vFontNamePreset gFontNamePresetChange, %fontPresetList%
-    Gui, Settings: Add, Text, x270 y70 vFontNameCustomLabel, 自定义:
-    Gui, Settings: Add, Edit, x320 y66 w100 vFontNameCustom, %FontName%
+    Gui, Settings: Add, DropDownList, x100 y76 w160 vFontNamePreset gFontNamePresetChange, %fontPresetList%
+    Gui, Settings: Add, Text, x270 y80 vFontNameCustomLabel, 自定义:
+    Gui, Settings: Add, Edit, x320 y76 w100 vFontNameCustom, %FontName%
     
     ; 初始化字体预设/自定义显示
     if InStr("|" . fontPresetList . "|", "|" . FontName . "|")
@@ -358,23 +369,23 @@ ShowSettings:
         GuiControl, Settings: Show, FontNameCustomLabel
     }
 
-    Gui, Settings: Add, Text, x20 y100, 字号:
-    Gui, Settings: Add, Edit, x60 y96 w40 vFontSize, %FontSize%
+    Gui, Settings: Add, Text, x20 y110, 字号:
+    Gui, Settings: Add, Edit, x60 y106 w40 vFontSize, %FontSize%
     Gui, Settings: Add, UpDown, vFontSizeUD Range8-24, %FontSize%
 
-    Gui, Settings: Add, Text, x120 y100, 字体粗细:
-    Gui, Settings: Add, DropDownList, x180 y96 w80 vFontWeight, Normal|Bold||
+    Gui, Settings: Add, Text, x120 y110, 字体粗细:
+    Gui, Settings: Add, DropDownList, x180 y106 w80 vFontWeight, Normal|Bold||
     GuiControl, Settings: Choose, FontWeight, % (FontWeight = "Bold") ? 2 : 1
 
     ; 背景色模式 + 自定义色 + 预览
-    Gui, Settings: Add, Text, x20 y130, 背景色模式:
-    Gui, Settings: Add, DropDownList, x90 y126 w80 gBgColorModeChange vBgColorMode, 浅色预设|深色预设|自定义||
+    Gui, Settings: Add, Text, x20 y140, 背景色模式:
+    Gui, Settings: Add, DropDownList, x90 y136 w80 gBgColorModeChange vBgColorMode, 浅色预设|深色预设|自定义||
     GuiControl, Settings: Choose, BgColorMode, % (BgColorMode = "浅色预设") ? 1 : (BgColorMode = "深色预设") ? 2 : 3
 
-    Gui, Settings: Add, Text, x180 y130, 自定义背景色:
-    Gui, Settings: Add, Edit, x260 y126 w80 vBgColor gBgColorChanged, %BgColor%
-    Gui, Settings: Add, Progress, x350 y126 w30 h20 vPrevBgColor +Border, 100
-    Gui, Settings: Add, Button, x390 y126 w45 h20 vPickBgBtn gPickBgColor, 取色
+    Gui, Settings: Add, Text, x180 y140, 自定义背景色:
+    Gui, Settings: Add, Edit, x260 y136 w80 vBgColor gBgColorChanged, %BgColor%
+    Gui, Settings: Add, Progress, x350 y136 w30 h20 vPrevBgColor +Border, 100
+    Gui, Settings: Add, Button, x390 y136 w45 h20 vPickBgBtn gPickBgColor, 取色
 
     ; 若不是自定义模式则禁用输入框与预览
     if (BgColorMode != "自定义")
@@ -385,108 +396,127 @@ ShowSettings:
     }
 
     ; 新增：只显示文字（与透明度互斥）
-    Gui, Settings: Add, Checkbox, x20 y160 vOnlyText gOnlyTextChanged, 只显示文字
+    Gui, Settings: Add, Checkbox, x20 y170 vOnlyText gOnlyTextChanged, 只显示文字
     GuiControl, Settings:, OnlyText, %OnlyText%
 
     ; 背景透明度（0-255）
-    Gui, Settings: Add, Text, x20 y190, 背景透明度 (0-255):
-    Gui, Settings: Add, Edit, x150 y186 w50 vBgTransparency +Number, %BgTransparency%
+    Gui, Settings: Add, Text, x20 y200, 背景透明度 (0-255):
+    Gui, Settings: Add, Edit, x150 y196 w50 vBgTransparency +Number, %BgTransparency%
     Gui, Settings: Add, UpDown, vBgTransparencyUD Range0-255, %BgTransparency%
-    Gui, Settings: Add, Text, x210 y190, (0=完全透明，255=完全不透明)
+    Gui, Settings: Add, Text, x210 y200, (0=完全透明，255=完全不透明)
 
     ; 显示器选择（多显示器支持）
     SysGet, mCount, MonitorCount
     dispOpt := "主屏幕|全部"
     Loop, %mCount%
         dispOpt .= "|" . "显示器" . A_Index
-    Gui, Settings: Add, Text, x20 y220, 显示器:
-    Gui, Settings: Add, DropDownList, x80 y216 w140 vDisplay, %dispOpt%
+    Gui, Settings: Add, Text, x20 y230, 显示器:
+    Gui, Settings: Add, DropDownList, x80 y226 w140 vDisplay, %dispOpt%
     ; 初始化选择：若 Display 为空则设置为主屏幕
     if (Display = "")
         Display := "主屏幕"
     GuiControl, Settings: ChooseString, Display, %Display%
 
+    ; 行标选项卡
+    Gui, Settings: Tab, 行标
+    Gui, Settings: Add, Checkbox, x20 y50 vShowLineMarkers gShowLineMarkersChanged, 显示上下行标志
+    GuiControl, Settings:, ShowLineMarkers, %ShowLineMarkers%
+    
+    Gui, Settings: Add, Checkbox, x20 y80 vColorChangeWithValue gColorChangeWithValueChanged, 标志随数值变色
+    GuiControl, Settings:, ColorChangeWithValue, %ColorChangeWithValue%
+    
+    Gui, Settings: Add, Text, x20 y110, 上下行标志样式:
+    LineMarkerStyles := "↑ ↓|TX RX|⬆️⬇️|🔼🔽|⏫⏬|上传 下载|上行 下行|发送 接收"
+    Gui, Settings: Add, DropDownList, x140 y106 w120 vLineMarkerStyle gLineMarkerStyleChange, %LineMarkerStyles%
+    GuiControl, Settings: ChooseString, LineMarkerStyle, %LineMarkerStyle%
+    
+    ; 如果未启用行标显示，则禁用下拉菜单
+    if (!ShowLineMarkers)
+    {
+        GuiControl, Settings: Disable, LineMarkerStyle
+    }
+
     ; 位置选项卡
     Gui, Settings: Tab, 位置
-    Gui, Settings: Add, Text, x20 y40, 位置角落:
-    Gui, Settings: Add, DropDownList, x100 y36 w100 vPositionCorner, 右下角|右上角|左下角|左上角||
+    Gui, Settings: Add, Text, x20 y50, 位置角落:
+    Gui, Settings: Add, DropDownList, x100 y46 w100 vPositionCorner, 右下角|右上角|左下角|左上角||
     GuiControl, Settings: Choose, PositionCorner, % (PositionCorner = "右下角") ? 1 : (PositionCorner = "右上角") ? 2 : (PositionCorner = "左下角") ? 3 : 4
-    Gui, Settings: Add, Checkbox, x210 y38 vLimitOffset, 限制偏离量（防止超出屏幕）
+    Gui, Settings: Add, Checkbox, x210 y48 vLimitOffset, 限制偏离量（防止超出屏幕）
     GuiControl, Settings:, LimitOffset, %LimitOffset%
     
-    Gui, Settings: Add, Text, x20 y70, 横向偏移:
-    Gui, Settings: Add, Edit, x100 y66 w60 vOffsetX +Number, %OffsetX%
+    Gui, Settings: Add, Text, x20 y80, 横向偏移:
+    Gui, Settings: Add, Edit, x100 y76 w60 vOffsetX +Number, %OffsetX%
     Gui, Settings: Add, UpDown, vOffsetXUD Range-1000-1000, %OffsetX%
-    Gui, Settings: Add, Text, x170 y70, (正数向右，负数向左)
+    Gui, Settings: Add, Text, x170 y80, (正数向右，负数向左)
     
-    Gui, Settings: Add, Text, x20 y100, 纵向偏移:
-    Gui, Settings: Add, Edit, x100 y96 w60 vOffsetY +Number, %OffsetY%
+    Gui, Settings: Add, Text, x20 y110, 纵向偏移:
+    Gui, Settings: Add, Edit, x100 y106 w60 vOffsetY +Number, %OffsetY%
     Gui, Settings: Add, UpDown, vOffsetYUD Range-200-200, %OffsetY%
-    Gui, Settings: Add, Text, x170 y100, (正数向上，负数向下)
+    Gui, Settings: Add, Text, x170 y110, (正数向上，负数向下)
     
-    Gui, Settings: Add, Checkbox, x20 y130 vDragPositioning gDragPositioningChanged, 启用拖动定位
+    Gui, Settings: Add, Checkbox, x20 y140 vDragPositioning gDragPositioningChanged, 启用拖动定位
     GuiControl, Settings:, DragPositioning, %DragPositioning%
-    Gui, Settings: Add, Text, x20 y160 w350, (启用后可拖动窗口调整位置，偏移量将自动计算保存)
+    Gui, Settings: Add, Text, x20 y170 w350, (启用后可拖动窗口调整位置，偏移量将自动计算保存)
     
     ; 网速阈值选项卡
     Gui, Settings: Tab, 网速阈值
-    Gui, Settings: Add, Text, x20 y40, 很低速阈值 (KB/s):
-    Gui, Settings: Add, Edit, x150 y36 w60 vThresh1KB +Number, % Round(Thresh1/1024)
+    Gui, Settings: Add, Text, x20 y50, 很低速阈值 (KB/s):
+    Gui, Settings: Add, Edit, x150 y46 w60 vThresh1KB +Number, % Round(Thresh1/1024)
     Gui, Settings: Add, UpDown, vThresh1KBUD Range1-1000, % Round(Thresh1/1024)
     
-    Gui, Settings: Add, Text, x20 y70, 低速阈值 (KB/s):
-    Gui, Settings: Add, Edit, x150 y66 w60 vThresh2KB +Number, % Round(Thresh2/1024)
+    Gui, Settings: Add, Text, x20 y80, 低速阈值 (KB/s):
+    Gui, Settings: Add, Edit, x150 y76 w60 vThresh2KB +Number, % Round(Thresh2/1024)
     Gui, Settings: Add, UpDown, vThresh2KBUD Range1-5000, % Round(Thresh2/1024)
     
-    Gui, Settings: Add, Text, x20 y100, 中速阈值 (MB/s):
-    Gui, Settings: Add, Edit, x150 y96 w60 vThresh3MB +Number, % Round(Thresh3/1024/1024)
+    Gui, Settings: Add, Text, x20 y110, 中速阈值 (MB/s):
+    Gui, Settings: Add, Edit, x150 y106 w60 vThresh3MB +Number, % Round(Thresh3/1024/1024)
     Gui, Settings: Add, UpDown, vThresh3MBUD Range1-100, % Round(Thresh3/1024/1024)
     
     ; 颜色选项卡
     Gui, Settings: Tab, 颜色
-    Gui, Settings: Add, Text, x20 y40, 很低速颜色:
-    Gui, Settings: Add, Edit, x120 y36 w80 vColorVeryLow gColorEditChanged, %ColorVeryLow%
-    Gui, Settings: Add, Progress, x205 y36 w30 h20 vPrevVeryLow +Border, 100
-    Gui, Settings: Add, Button, x240 y34 w45 h22 gPickVeryLow, 取色
+    Gui, Settings: Add, Text, x20 y50, 很低速颜色:
+    Gui, Settings: Add, Edit, x120 y46 w80 vColorVeryLow gColorEditChanged, %ColorVeryLow%
+    Gui, Settings: Add, Progress, x205 y46 w30 h20 vPrevVeryLow +Border, 100
+    Gui, Settings: Add, Button, x240 y44 w45 h22 gPickVeryLow, 取色
     
-    Gui, Settings: Add, Text, x20 y70, 低速颜色:
-    Gui, Settings: Add, Edit, x120 y66 w80 vColorLow gColorEditChanged, %ColorLow%
-    Gui, Settings: Add, Progress, x205 y66 w30 h20 vPrevLow +Border, 100
-    Gui, Settings: Add, Button, x240 y64 w45 h22 gPickLow, 取色
+    Gui, Settings: Add, Text, x20 y80, 低速颜色:
+    Gui, Settings: Add, Edit, x120 y76 w80 vColorLow gColorEditChanged, %ColorLow%
+    Gui, Settings: Add, Progress, x205 y76 w30 h20 vPrevLow +Border, 100
+    Gui, Settings: Add, Button, x240 y74 w45 h22 gPickLow, 取色
     
-    Gui, Settings: Add, Text, x20 y100, 中速颜色:
-    Gui, Settings: Add, Edit, x120 y96 w80 vColorMed gColorEditChanged, %ColorMed%
-    Gui, Settings: Add, Progress, x205 y96 w30 h20 vPrevMed +Border, 100
-    Gui, Settings: Add, Button, x240 y94 w45 h22 gPickMed, 取色
+    Gui, Settings: Add, Text, x20 y110, 中速颜色:
+    Gui, Settings: Add, Edit, x120 y106 w80 vColorMed gColorEditChanged, %ColorMed%
+    Gui, Settings: Add, Progress, x205 y106 w30 h20 vPrevMed +Border, 100
+    Gui, Settings: Add, Button, x240 y104 w45 h22 gPickMed, 取色
     
-    Gui, Settings: Add, Text, x20 y130, 高速颜色:
-    Gui, Settings: Add, Edit, x120 y126 w80 vColorHigh gColorEditChanged, %ColorHigh%
-    Gui, Settings: Add, Progress, x205 y126 w30 h20 vPrevHigh +Border, 100
-    Gui, Settings: Add, Button, x240 y124 w45 h22 gPickHigh, 取色
+    Gui, Settings: Add, Text, x20 y140, 高速颜色:
+    Gui, Settings: Add, Edit, x120 y136 w80 vColorHigh gColorEditChanged, %ColorHigh%
+    Gui, Settings: Add, Progress, x205 y136 w30 h20 vPrevHigh +Border, 100
+    Gui, Settings: Add, Button, x240 y134 w45 h22 gPickHigh, 取色
     
     ; 高级选项卡
     Gui, Settings: Tab, 高级
-    Gui, Settings: Add, Checkbox, x20 y40 vEnableSmoothing, 平滑处理
+    Gui, Settings: Add, Checkbox, x20 y50 vEnableSmoothing, 平滑处理
     GuiControl, Settings:, EnableSmoothing, %EnableSmoothing%
     
-    Gui, Settings: Add, Text, x20 y70, EMA 平滑因子 (0-1):
-    Gui, Settings: Add, Edit, x150 y66 w50 vEMAFactor, %EMAFactor%
-    Gui, Settings: Add, Text, x210 y70, （若启用平滑处理推荐0.35）
+    Gui, Settings: Add, Text, x20 y80, EMA 平滑因子 (0-1):
+    Gui, Settings: Add, Edit, x150 y76 w50 vEMAFactor, %EMAFactor%
+    Gui, Settings: Add, Text, x210 y80, （若启用平滑处理推荐0.35）
     
-    Gui, Settings: Add, Text, x20 y100, 防抖确认次数:
-    Gui, Settings: Add, Edit, x150 y96 w50 vConfirmNeeded +Number, %ConfirmNeeded%
+    Gui, Settings: Add, Text, x20 y110, 防抖确认次数:
+    Gui, Settings: Add, Edit, x150 y106 w50 vConfirmNeeded +Number, %ConfirmNeeded%
     Gui, Settings: Add, UpDown, vConfirmNeededUD Range1-10, %ConfirmNeeded%
-    Gui, Settings: Add, Text, x210 y100, （颜色更新需连续出现几次）
+    Gui, Settings: Add, Text, x210 y110, （颜色更新需连续出现几次）
 
-    Gui, Settings: Add, Checkbox, x20 y130 vAutoStart gAutoStartChanged, 开机自启动
+    Gui, Settings: Add, Checkbox, x20 y140 vAutoStart gAutoStartChanged, 开机自启动
     GuiControl, Settings:, AutoStart, %AutoStart%
 
-    Gui, Settings: Add, Text, x160 y130, 范围:
-    Gui, Settings: Add, DropDownList, x200 y126 w90 vAutoStartScope, 当前用户|所有用户||
+    Gui, Settings: Add, Text, x160 y140, 范围:
+    Gui, Settings: Add, DropDownList, x200 y136 w90 vAutoStartScope, 当前用户|所有用户||
     GuiControl, Settings: Choose, AutoStartScope, % (AutoStartScope = "当前用户") ? 1 : 2
 
-    Gui, Settings: Add, Button, x300 y126 w45 h22 gOpenCurrentStartup, 当前
-    Gui, Settings: Add, Button, x350 y126 w45 h22 gOpenGlobalStartup, 全局
+    Gui, Settings: Add, Button, x300 y136 w45 h22 gOpenCurrentStartup, 当前
+    Gui, Settings: Add, Button, x350 y136 w45 h22 gOpenGlobalStartup, 全局
 
     ; 若未启用自启动，则禁用下拉菜单
     if (!AutoStart)
@@ -577,6 +607,33 @@ DragPositioningChanged:
         GuiControl, Settings: Enable, OffsetYUD
         GuiControl, Settings: Enable, LimitOffset
     }
+Return
+
+; ---------- 显示上下行标志开关变化回调（设置窗口内） ----------
+ShowLineMarkersChanged:
+    Gui, Settings: Submit, NoHide
+    if (ShowLineMarkers)
+    {
+        GuiControl, Settings: Enable, LineMarkerStyle
+    }
+    else
+    {
+        GuiControl, Settings: Disable, LineMarkerStyle
+    }
+    
+    CombinedMode := ColorChangeWithValue && ShowLineMarkers
+Return
+
+; ---------- 标志随数值变色开关变化回调（设置窗口内） ----------
+ColorChangeWithValueChanged:
+    Gui, Settings: Submit, NoHide
+    
+    CombinedMode := ColorChangeWithValue && ShowLineMarkers
+Return
+
+; ---------- 行标样式变化回调（设置窗口内） ----------
+LineMarkerStyleChange:
+    Gui, Settings: Submit, NoHide
 Return
 
 ; ---------- 初始化/更新颜色预览（供设置窗口使用） ----------
@@ -803,6 +860,10 @@ SaveSettings:
     IniWrite, %BgColor%, %ConfigFile%, GUI, BgColor
     IniWrite, %OnlyText%, %ConfigFile%, GUI, OnlyText
     IniWrite, %BgTransparency%, %ConfigFile%, GUI, BgTransparency
+    IniWrite, %ShowLineMarkers%, %ConfigFile%, GUI, ShowLineMarkers
+    IniWrite, %LineMarkerStyle%, %ConfigFile%, GUI, LineMarkerStyle
+    IniWrite, %ColorChangeWithValue%, %ConfigFile%, GUI, ColorChangeWithValue
+    CombinedMode := ColorChangeWithValue && ShowLineMarkers
     IniWrite, %PositionCorner%, %ConfigFile%, Position, Corner
     IniWrite, %OffsetX%, %ConfigFile%, Position, OffsetX
     IniWrite, %OffsetY%, %ConfigFile%, Position, OffsetY
@@ -901,6 +962,7 @@ Return
 
 ; ---------- 定时更新函数：UpdateNet（每 Interval 毫秒触发） ----------
 UpdateNet:
+    global CombinedMode
     ; 在每次循环开始时，重置累加值和候选/临时变量
     recv := 0
     sent := 0
@@ -980,23 +1042,53 @@ UpdateNet:
     sSent := FormatSpeed(emaUp)
     sRecv := FormatSpeed(emaDown)
 
-    ; --- 仅在文本变化时刷新 GUI 文本，减少重绘开销 ---
-    if (sSent != lastTextUp)
+    ; --- 使用预计算的组合模式 ---
+    if (CombinedMode)
     {
-        GuiControl,, UpNum, %sSent%
-        lastTextUp := sSent
-    }
-    if (sRecv != lastTextDown)
-    {
-        GuiControl,, DownNum, %sRecv%
-        lastTextDown := sRecv
-    }
+        ; 开启时：标志和数值、单位一起动态生成
+        GetLineMarkers(upSymbol, downSymbol)
+        
+    ; 将箭头符号添加到速度文本后面（因为使用右对齐）
+        sSentWithArrow := sSent . " " . upSymbol
+        sRecvWithArrow := sRecv . " " . downSymbol
+        
+        ; --- 仅在文本变化时刷新 GUI 文本，减少重绘开销 ---
+        if (sSentWithArrow != lastTextUp)
+        {
+            GuiControl,, UpNum, %sSentWithArrow%
+            lastTextUp := sSentWithArrow
+        }
+        if (sRecvWithArrow != lastTextDown)
+        {
+            GuiControl,, DownNum, %sRecvWithArrow%
+            lastTextDown := sRecvWithArrow
+        }
 
-    ; --- 刷新颜色（将 lastColorUp/Down 应用于控件） ---
-    GuiControl, +c%lastColorUp%, UpNum
-    GuiControl, +c%lastColorUp%, UpArrow
-    GuiControl, +c%lastColorDown%, DownNum
-    GuiControl, +c%lastColorDown%, DownArrow
+        ; --- 刷新颜色（只应用于数字控件，箭头已包含在文本中） ---
+        GuiControl, +c%lastColorUp%, UpNum
+        GuiControl, +c%lastColorDown%, DownNum
+    }
+    else
+    {
+        ; 关闭时：分别更新数字和箭头
+        ; --- 仅在文本变化时刷新 GUI 文本，减少重绘开销 ---
+        if (sSent != lastTextUp)
+        {
+            GuiControl,, UpNum, %sSent%
+            lastTextUp := sSent
+        }
+        if (sRecv != lastTextDown)
+        {
+            GuiControl,, DownNum, %sRecv%
+            lastTextDown := sRecv
+        }
+
+        ; --- 刷新颜色（将 lastColorUp/Down 应用于控件） ---
+        GuiControl, +c%lastColorUp%, UpNum
+        GuiControl, +c%lastColorUp%, UpArrow
+        GuiControl, +c%lastColorDown%, DownNum
+        GuiControl, +c%lastColorDown%, DownArrow
+    }
 Return
 
 ; ------------------------- 颜色选择函数 -------------------------
@@ -1032,11 +1124,33 @@ CreateGuiAndShow(hexColor)
     Gui, Margin, 0,0
     Gui, Font, s%FontSize% %FontWeight%, %FontName%
 
-    ; 添加控件：上行/下行数字与箭头，使用 BackgroundTrans（文字透明）以配合背景处理
-    Gui, Add, Text, x0 y%UpY% w%NumWidth% vUpNum   Right  c%hexColor% BackgroundTrans, 初始化...
-    Gui, Add, Text, x%ArrowX% y%UpY% w%ArrowWidth% vUpArrow  Center c%hexColor% BackgroundTrans, ↑
-    Gui, Add, Text, x0 y%DownY% w%NumWidth% vDownNum Right  c%hexColor% BackgroundTrans, 初始化...
-    Gui, Add, Text, x%ArrowX% y%DownY% w%ArrowWidth% vDownArrow Center c%hexColor% BackgroundTrans, ↓
+    ; 使用预计算的组合模式
+    global CombinedMode
+    
+    if (CombinedMode)
+    {
+        ; 开启时：标志和数值、单位一起动态生成，不创建单独的箭头控件
+        GetLineMarkers(upSymbol, downSymbol)
+        
+        ; 创建包含箭头的数字控件，使用完整宽度，右对齐（箭头在右侧）
+        Gui, Add, Text, x0 y%UpY% w%GuiWidth% vUpNum   Right  c%hexColor% BackgroundTrans, 初始化...
+        Gui, Add, Text, x0 y%DownY% w%GuiWidth% vDownNum Right  c%hexColor% BackgroundTrans, 初始化...
+        
+        ; 创建隐藏的箭头控件（用于保持兼容性，但不显示）
+        Gui, Add, Text, x-100 y-100 w1 vUpArrow  Center c%hexColor% BackgroundTrans, 
+        Gui, Add, Text, x-100 y-100 w1 vDownArrow Center c%hexColor% BackgroundTrans, 
+    }
+    else
+    {
+        ; 关闭时：行标还是一次生成即可，是单独的元素
+        GetLineMarkers(upSymbol, downSymbol)
+        
+        ; 添加控件：上行/下行数字与箭头，使用 BackgroundTrans（文字透明）以配合背景处理
+        Gui, Add, Text, x0 y%UpY% w%NumWidth% vUpNum   Right  c%hexColor% BackgroundTrans, 初始化...
+        Gui, Add, Text, x%ArrowX% y%UpY% w%ArrowWidth% vUpArrow  Center c%hexColor% BackgroundTrans, %upSymbol%
+        Gui, Add, Text, x0 y%DownY% w%NumWidth% vDownNum Right  c%hexColor% BackgroundTrans, 初始化...
+        Gui, Add, Text, x%ArrowX% y%DownY% w%ArrowWidth% vDownArrow Center c%hexColor% BackgroundTrans, %downSymbol%
+    }
 
     ; 设置窗口背景颜色（使用已规范化的 BgColor）
     Gui, Color, %BgColor%
@@ -1178,6 +1292,67 @@ PositionGui()
 }
 
 ; ========================= 显示格式化与工具函数 =========================
+
+; ---------- 获取上下行标志符号 ----------
+GetLineMarkers(ByRef upSymbol, ByRef downSymbol)
+{
+    global ShowLineMarkers, LineMarkerStyle
+    
+    if (!ShowLineMarkers)
+    {
+        upSymbol := ""
+        downSymbol := ""
+        return
+    }
+    
+    ; 解析不同的标志样式
+    if (LineMarkerStyle = "↑ ↓")
+    {
+        upSymbol := "↑"
+        downSymbol := "↓"
+    }
+    else if (LineMarkerStyle = "TX RX")
+    {
+        upSymbol := "TX"
+        downSymbol := "RX"
+    }
+    else if (LineMarkerStyle = "⬆️⬇️")
+    {
+        upSymbol := "⬆️"
+        downSymbol := "⬇️"
+    }
+    else if (LineMarkerStyle = "🔼🔽")
+    {
+        upSymbol := "🔼"
+        downSymbol := "🔽"
+    }
+    else if (LineMarkerStyle = "⏫⏬")
+    {
+        upSymbol := "⏫"
+        downSymbol := "⏬"
+    }
+    else if (LineMarkerStyle = "上传 下载")
+    {
+        upSymbol := "上传"
+        downSymbol := "下载"
+    }
+    else if (LineMarkerStyle = "上行 下行")
+    {
+        upSymbol := "上行"
+        downSymbol := "下行"
+    }
+    else if (LineMarkerStyle = "发送 接收")
+    {
+        upSymbol := "发送"
+        downSymbol := "接收"
+    }
+    else
+    {
+        ; 默认样式
+        upSymbol := "↑"
+        downSymbol := "↓"
+    }
+}
 
 ; ---------- 格式化网速，带单位（返回字符串） ----------
 FormatSpeed(val)
