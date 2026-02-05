@@ -997,16 +997,13 @@ UpdateNet:
         }
     }
 
-    ; --- EMA 平滑处理（性能优化：当 EMAFactor 为 1 时等同直接赋值） ---
-    if (emaUp = 0)
-        emaUp := sent
+    if (EMAFactor = 1)
+        emaUp := sent, emaDown := recv
     else
-        emaUp := emaUp*(1-EMAFactor) + sent*EMAFactor
-
-    if (emaDown = 0)
-        emaDown := recv
-    else
-        emaDown := emaDown*(1-EMAFactor) + recv*EMAFactor
+    {
+        emaUp := (emaUp ? emaUp*(1-EMAFactor) + sent*EMAFactor : sent)
+        emaDown := (emaDown ? emaDown*(1-EMAFactor) + recv*EMAFactor : recv)
+    }
 
     ; --- 根据 EMA 值决定候选颜色（按阈值分类） ---
     candidateUp := GetColorBySpeed(emaUp)
