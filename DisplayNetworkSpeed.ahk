@@ -1377,7 +1377,7 @@ FormatSpeed(val)
     else if (val >= 1024) ; 大于 1KB/s
         return Round(val/1024, 1) . " KB/s"
     else
-        return Round(val, 0) . " B/s"
+        return Round(val, 0) . "  B/s"
 }
 
 ; ---------- 工具函数：检查是否为 6 位十六进制字符串 ----------
