@@ -60,7 +60,7 @@ DownY := 22
 ArrowX := NumWidth
 
 global UpNum, UpArrow, DownNum, DownArrow
-global emaUp := 0, emaDown := 0
+global emaUp := 0, emaDown := 0, emaInitialized := false
 global pendingUp := "", pendingDown := ""
 global pendingCountUp := 0, pendingCountDown := 0
 global lastColorUp := "", lastColorDown := ""
@@ -910,9 +910,11 @@ UpdateNet(*) {
 
     if (EMAFactor = 1)
         emaUp := sent, emaDown := recv
+    else if (!emaInitialized)
+        emaUp := sent, emaDown := recv, emaInitialized := true
     else {
-        emaUp := (emaUp ? emaUp * (1 - EMAFactor) + sent * EMAFactor : sent)
-        emaDown := (emaDown ? emaDown * (1 - EMAFactor) + recv * EMAFactor : recv)
+        emaUp := emaUp * (1 - EMAFactor) + sent * EMAFactor
+        emaDown := emaDown * (1 - EMAFactor) + recv * EMAFactor
     }
 
     candidateUp := GetColorBySpeed(emaUp)
