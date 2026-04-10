@@ -372,12 +372,12 @@ ShowSettings(*) {
     SettingsGui.Add("Checkbox", "x210 y48 vLimitOffset", "限制偏离量（防止超出屏幕）").Value := LimitOffset
 
     SettingsGui.Add("Text", "x20 y80", "横向偏移:")
-    SettingsGui.Add("Edit", "x100 y76 w60 vOffsetX Number", OffsetX)
+    SettingsGui.Add("Edit", "x100 y76 w60 vOffsetX", OffsetX).OnEvent("Change", SignedIntEditFilter)
     SettingsGui.Add("UpDown", "vOffsetXUD Range-1000-1000", OffsetX)
     SettingsGui.Add("Text", "x170 y80", "(正数向右，负数向左)")
 
     SettingsGui.Add("Text", "x20 y110", "纵向偏移:")
-    SettingsGui.Add("Edit", "x100 y106 w60 vOffsetY Number", OffsetY)
+    SettingsGui.Add("Edit", "x100 y106 w60 vOffsetY", OffsetY).OnEvent("Change", SignedIntEditFilter)
     SettingsGui.Add("UpDown", "vOffsetYUD Range-200-200", OffsetY)
     SettingsGui.Add("Text", "x170 y110", "(正数向上，负数向下)")
 
@@ -664,6 +664,15 @@ FontNamePresetChange(*) {
         SettingsGui["FontNameCustom"].Visible := false
         SettingsGui["FontNameCustomLabel"].Visible := false
     }
+}
+
+SignedIntEditFilter(ctrl, *) {
+    val := ctrl.Value
+    cleaned := RegExReplace(val, "[^\d-]", "")
+    if (StrLen(cleaned) > 1)
+        cleaned := SubStr(cleaned, 1, 1) . RegExReplace(SubStr(cleaned, 2), "-", "")
+    if (cleaned != val)
+        ctrl.Value := cleaned
 }
 
 OnlyTextChanged(*) {
