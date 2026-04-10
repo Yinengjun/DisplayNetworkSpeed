@@ -41,6 +41,7 @@ DefaultEMAFactor := "0.35"
 DefaultConfirmNeeded := 2
 DefaultStatsScope := "全部网卡"
 DefaultStatsAdapters := ""
+DefaultDataSource := "WMI"
 DefaultAutoRestart := false
 DefaultMouseThrough := true
 DefaultDisplayTarget := "主屏幕"
@@ -93,22 +94,12 @@ global AboutGui := 0
 global MainGui := 0
 
 global wmi, WmiWarned
+global DataSource
+global IpPrevTick := 0, IpPrevMap := Map()
+global IpHelperAvailable := true, IpHelperWarned := false
 WmiWarned := false
 wmi := ""
-try {
-    wmi := ComObjGet("winmgmts:{impersonationLevel=impersonate}!//./root/cimv2")
-    test := wmi.ExecQuery("SELECT BytesReceivedPersec, BytesSentPersec FROM Win32_PerfFormattedData_Tcpip_NetworkInterface")
-} catch as e {
-    try {
-        test := wmi.ExecQuery("SELECT BytesReceivedPersec, BytesSentPersec FROM Win32_PerfFormattedData_Tcpip_TCPv4")
-    } catch as e2 {
-        wmi := ""
-    }
-}
-if (!wmi && !WmiWarned) {
-    WmiWarned := true
-    TrayTip("WMI 接口不可用，速度显示可能为 0。可尝试以管理员运行或重启系统。", "网速监控")
-}
+InitDataSource()
 
 CreateGuiAndShow(ColorVeryLow)
 SetTimer(UpdateNet, Interval)
@@ -154,6 +145,7 @@ LoadConfig() {
     ConfirmNeeded := IniRead(ConfigFile, "Advanced", "ConfirmNeeded", DefaultConfirmNeeded)
     StatsScope := IniRead(ConfigFile, "Advanced", "StatsScope", DefaultStatsScope)
     SelectedAdapters := IniRead(ConfigFile, "Advanced", "StatsAdapters", DefaultStatsAdapters)
+    DataSource := IniRead(ConfigFile, "Advanced", "DataSource", DefaultDataSource)
 
     DragPositioning := IniRead(ConfigFile, "Position", "DragPositioning", DefaultDragPositioning)
 
@@ -196,6 +188,8 @@ LoadConfig() {
 
     if (StatsScope != "自动" && StatsScope != "全部网卡" && StatsScope != "自定义")
         StatsScope := DefaultStatsScope
+
+    DataSource := NormalizeDataSource(DataSource)
 
     if (!EnableSmoothing)
         EMAFactor := 1.0
@@ -241,6 +235,7 @@ CreateDefaultConfig() {
     IniWrite(DefaultConfirmNeeded, ConfigFile, "Advanced", "ConfirmNeeded")
     IniWrite(DefaultStatsScope, ConfigFile, "Advanced", "StatsScope")
     IniWrite(DefaultStatsAdapters, ConfigFile, "Advanced", "StatsAdapters")
+    IniWrite(DefaultDataSource, ConfigFile, "Advanced", "DataSource")
 
     IniWrite(DefaultDragPositioning, ConfigFile, "Position", "DragPositioning")
 
@@ -258,6 +253,7 @@ ShowSettings(*) {
     global EnableSmoothing, EMAFactor, ConfirmNeeded
     global StatsScope, AutoStart, AutoStartScope
     global ShowLineMarkers, LineMarkerStyle, ColorChangeWithValue
+    global DataSource
 
     if (SettingsGui)
         SettingsGui.Destroy()
@@ -434,37 +430,44 @@ ShowSettings(*) {
     SettingsGui.Add("Button", "x240 y134 w45 h22", "取色").OnEvent("Click", PickHigh)
 
     tab.UseTab("高级")
-    SettingsGui.Add("Text", "x20 y50", "统计范围:")
-    statsScopeCtrl := SettingsGui.Add("DropDownList", "x90 y46 w120 vStatsScope", ["自动", "全部网卡", "自定义"])
+    SettingsGui.Add("Text", "x20 y50", "数据来源:")
+    dataSourceCtrl := SettingsGui.Add("DropDownList", "x90 y46 w160 vDataSource", ["WMI (默认)", "IP Helper API"])
+    dataSourceCtrl.OnEvent("Change", DataSourceChanged)
+    dataSourceCtrl.Choose(DataSourceToDisplay(DataSource))
+    SettingsGui.Add("Text", "x260 y44 w170 h34 vDataSourceWarn", "")
+
+    SettingsGui.Add("Text", "x20 y80", "统计范围:")
+    statsScopeCtrl := SettingsGui.Add("DropDownList", "x90 y76 w120 vStatsScope", ["自动", "全部网卡", "自定义"])
     statsScopeCtrl.OnEvent("Change", StatsScopeChanged)
-    SettingsGui.Add("Button", "x220 y44 w60 h22 vSelectAdaptersBtn", "选择...").OnEvent("Click", SelectAdapters)
-    SettingsGui.Add("Text", "x290 y50 w140 vStatsScopeHint", "")
+    SettingsGui.Add("Button", "x220 y74 w60 h22 vSelectAdaptersBtn", "选择...").OnEvent("Click", SelectAdapters)
+    SettingsGui.Add("Text", "x290 y80 w140 vStatsScopeHint", "")
 
     statsScopeCtrl.Choose(StatsScope)
     StatsScopeChanged()
+    UpdateDataSourceStatusText()
 
-    smoothCtrl := SettingsGui.Add("Checkbox", "x20 y80 vEnableSmoothing", "平滑处理")
+    smoothCtrl := SettingsGui.Add("Checkbox", "x20 y110 vEnableSmoothing", "平滑处理")
     smoothCtrl.Value := EnableSmoothing
 
-    SettingsGui.Add("Text", "x20 y110", "EMA 平滑因子 (0-1):")
-    SettingsGui.Add("Edit", "x150 y106 w50 vEMAFactor", EMAFactor)
-    SettingsGui.Add("Text", "x210 y110", "（若启用平滑处理推荐0.35）")
+    SettingsGui.Add("Text", "x20 y140", "EMA 平滑因子 (0-1):")
+    SettingsGui.Add("Edit", "x150 y136 w50 vEMAFactor", EMAFactor)
+    SettingsGui.Add("Text", "x210 y140", "（若启用平滑处理推荐0.35）")
 
-    SettingsGui.Add("Text", "x20 y140", "防抖确认次数:")
-    SettingsGui.Add("Edit", "x150 y136 w50 vConfirmNeeded Number", ConfirmNeeded)
+    SettingsGui.Add("Text", "x20 y170", "防抖确认次数:")
+    SettingsGui.Add("Edit", "x150 y166 w50 vConfirmNeeded Number", ConfirmNeeded)
     SettingsGui.Add("UpDown", "vConfirmNeededUD Range1-10", ConfirmNeeded)
-    SettingsGui.Add("Text", "x210 y140", "（颜色更新需连续出现几次）")
+    SettingsGui.Add("Text", "x210 y170", "（颜色更新需连续出现几次）")
 
-    autoStartCtrl := SettingsGui.Add("Checkbox", "x20 y170 vAutoStart", "开机自启动")
+    autoStartCtrl := SettingsGui.Add("Checkbox", "x20 y200 vAutoStart", "开机自启动")
     autoStartCtrl.Value := AutoStart
     autoStartCtrl.OnEvent("Click", AutoStartChanged)
 
-    SettingsGui.Add("Text", "x160 y170", "范围:")
-    autoStartScopeCtrl := SettingsGui.Add("DropDownList", "x200 y166 w90 vAutoStartScope", ["当前用户", "所有用户"])
+    SettingsGui.Add("Text", "x160 y200", "范围:")
+    autoStartScopeCtrl := SettingsGui.Add("DropDownList", "x200 y196 w90 vAutoStartScope", ["当前用户", "所有用户"])
     autoStartScopeCtrl.Choose(AutoStartScope = "当前用户" ? 1 : 2)
 
-    SettingsGui.Add("Button", "x300 y166 w45 h22", "当前").OnEvent("Click", OpenCurrentStartup)
-    SettingsGui.Add("Button", "x350 y166 w45 h22", "全局").OnEvent("Click", OpenGlobalStartup)
+    SettingsGui.Add("Button", "x300 y196 w45 h22", "当前").OnEvent("Click", OpenCurrentStartup)
+    SettingsGui.Add("Button", "x350 y196 w45 h22", "全局").OnEvent("Click", OpenGlobalStartup)
 
     if (!AutoStart) {
         SettingsGui["AutoStartScope"].Enabled := false
@@ -501,6 +504,10 @@ StatsScopeChanged(*) {
     StatsScope := SettingsGui["StatsScope"].Text
     SettingsGui["SelectAdaptersBtn"].Enabled := (StatsScope = "自定义")
     UpdateStatsScopeHint()
+}
+
+DataSourceChanged(*) {
+    UpdateDataSourceStatusText()
 }
 
 SelectAdapters(*) {
@@ -596,6 +603,28 @@ UpdateStatsScopeHint() {
     SettingsGui["StatsScopeHint"].Text := hint
 }
 
+UpdateDataSourceStatusText() {
+    global SettingsGui
+    if (!SettingsGui)
+        return
+
+    selected := NormalizeDataSource(SettingsGui["DataSource"].Text)
+    warn := ""
+
+    if (selected = "IPHelper") {
+        if (!CheckIpHelperAvailable())
+            warn := "IP Helper 不可用，保存后回退 WMI"
+    }
+
+    if (warn = "") {
+        SettingsGui["DataSourceWarn"].Opt("c008000")
+        SettingsGui["DataSourceWarn"].Text := "可用"
+    } else {
+        SettingsGui["DataSourceWarn"].Opt("cC00000")
+        SettingsGui["DataSourceWarn"].Text := warn
+    }
+}
+
 RgbOrBgrToBgrNo0x(c) {
     s := Trim(c)
     if (SubStr(s, 1, 2) = "0x" || SubStr(s, 1, 2) = "0X") {
@@ -658,6 +687,7 @@ SaveSettings(*) {
     global DragPositioning
     global AutoStart, AutoStartScope
     global ShowLineMarkers, LineMarkerStyle, ColorChangeWithValue
+    global DataSource
     global CombinedMode
 
     values := SettingsGui.Submit(false)
@@ -680,6 +710,7 @@ SaveSettings(*) {
     ConfirmNeeded := RegExReplace(values.ConfirmNeeded, "[,\s]", "")
     EMAFactor := Trim(values.EMAFactor)
     StatsScope := Trim(values.StatsScope)
+    DataSource := NormalizeDataSource(values.DataSource)
     LimitOffset := values.LimitOffset ? 1 : 0
     DragPositioning := values.DragPositioning ? 1 : 0
 
@@ -724,6 +755,8 @@ SaveSettings(*) {
         ConfirmNeeded := 2
     if (StatsScope != "自动" && StatsScope != "全部网卡" && StatsScope != "自定义")
         StatsScope := "全部网卡"
+    if (DataSource = "")
+        DataSource := "WMI"
     if (EMAFactor = "")
         EMAFactor := DefaultEMAFactor
     else if (EMAFactor < 0)
@@ -798,6 +831,7 @@ SaveSettings(*) {
     IniWrite(ConfirmNeeded, ConfigFile, "Advanced", "ConfirmNeeded")
     IniWrite(StatsScope, ConfigFile, "Advanced", "StatsScope")
     IniWrite(SelectedAdapters, ConfigFile, "Advanced", "StatsAdapters")
+    IniWrite(DataSource, ConfigFile, "Advanced", "DataSource")
 
     IniWrite(DragPositioning, ConfigFile, "Position", "DragPositioning")
 
@@ -854,7 +888,7 @@ UpdateNet(*) {
     global pendingUp, pendingDown, pendingCountUp, pendingCountDown
     global lastColorUp, lastColorDown, lastDisplayColorUp, lastDisplayColorDown
     global lastTextUp, lastTextDown, emaUp, emaDown
-    global wmi, StatsScope, SelectedAdapters
+    global StatsScope, SelectedAdapters
 
     recv := 0
     sent := 0
@@ -863,29 +897,7 @@ UpdateNet(*) {
     candidateUp := ""
     candidateDown := ""
 
-    if (wmi) {
-        try {
-            q := wmi.ExecQuery("SELECT BytesReceivedPersec, BytesSentPersec FROM Win32_PerfFormattedData_Tcpip_NetworkInterface")
-            if (!q.Count)
-                q := wmi.ExecQuery("SELECT BytesReceivedPersec, BytesSentPersec FROM Win32_PerfFormattedData_Tcpip_TCPv4")
-            for item in q {
-                name := item.Name
-                r := item.BytesReceivedPersec ? item.BytesReceivedPersec : 0
-                s := item.BytesSentPersec ? item.BytesSentPersec : 0
-
-                if (StatsScope = "自定义" && SelectedAdapters != "" && !IsAdapterSelected(name))
-                    continue
-                if (StatsScope = "自动" && (r + s = 0))
-                    continue
-
-                recv += r
-                sent += s
-            }
-        } catch as e {
-            recv := 0
-            sent := 0
-        }
-    }
+    GetSpeedData(&recv, &sent)
 
     if (EMAFactor = 1)
         emaUp := sent, emaDown := recv
@@ -974,6 +986,265 @@ EnsureTopmostOnTaskbarActive(*) {
     if (!hGui)
         return
     WinSetAlwaysOnTop(true, "ahk_id " hGui)
+}
+
+NormalizeDataSource(value) {
+    v := Trim(value)
+    if (v = "WMI" || v = "IPHelper")
+        return v
+    if (v = "WMI (默认)")
+        return "WMI"
+    if (v = "IP Helper API")
+        return "IPHelper"
+    return "WMI"
+}
+
+DataSourceToDisplay(value) {
+    if (value = "IPHelper")
+        return 2
+    return 1
+}
+
+CheckIpHelperAvailable() {
+    size := 0
+    status := 0
+    try {
+        status := DllCall("iphlpapi.dll\GetIfTable", "ptr", 0, "uint*", &size, "int", false, "uint")
+    } catch as e {
+        return false
+    }
+    return (status = 0 || status = 122)
+}
+
+InitDataSource() {
+    global DataSource, wmi, WmiWarned
+    global IpPrevTick, IpPrevMap
+    global IpHelperAvailable
+
+    wmi := ""
+
+    if (DataSource = "WMI") {
+        InitWmi()
+    } else if (DataSource = "IPHelper") {
+        IpHelperAvailable := true
+        IpPrevTick := 0
+        IpPrevMap := Map()
+    }
+}
+
+SwitchToWmiDataSource() {
+    global DataSource, wmi
+    DataSource := "WMI"
+    if (!wmi)
+        InitWmi()
+}
+
+HandleIpHelperFailure(&recv, &sent, tipText) {
+    global IpHelperAvailable, IpHelperWarned, IpPrevTick, IpPrevMap
+    IpHelperAvailable := false
+    IpPrevTick := 0
+    IpPrevMap := Map()
+    if (!IpHelperWarned) {
+        IpHelperWarned := true
+        TrayTip(tipText, "网速监控")
+    }
+    SwitchToWmiDataSource()
+    GetSpeedDataWmi(&recv, &sent)
+}
+
+InitWmi() {
+    global wmi, WmiWarned
+    wmi := ""
+    try {
+        wmi := ComObjGet("winmgmts:{impersonationLevel=impersonate}!//./root/cimv2")
+        test := wmi.ExecQuery("SELECT BytesReceivedPersec, BytesSentPersec FROM Win32_PerfFormattedData_Tcpip_NetworkInterface")
+    } catch as e {
+        try {
+            test := wmi.ExecQuery("SELECT BytesReceivedPersec, BytesSentPersec FROM Win32_PerfFormattedData_Tcpip_TCPv4")
+        } catch as e2 {
+            wmi := ""
+        }
+    }
+    if (!wmi && !WmiWarned) {
+        WmiWarned := true
+        TrayTip("WMI 接口不可用，速度显示可能为 0。可尝试以管理员运行或重启系统。", "网速监控")
+    }
+}
+
+GetSpeedData(&recv, &sent) {
+    global DataSource, IpHelperAvailable
+    recv := 0
+    sent := 0
+    if (DataSource = "IPHelper") {
+        if (!IpHelperAvailable) {
+            SwitchToWmiDataSource()
+            GetSpeedDataWmi(&recv, &sent)
+            return
+        }
+        GetSpeedDataIpHelper(&recv, &sent)
+        return
+    }
+    GetSpeedDataWmi(&recv, &sent)
+}
+
+GetSpeedDataWmi(&recv, &sent) {
+    global wmi, StatsScope, SelectedAdapters
+    if (!wmi)
+        return
+    try {
+        q := wmi.ExecQuery("SELECT BytesReceivedPersec, BytesSentPersec, Name FROM Win32_PerfFormattedData_Tcpip_NetworkInterface")
+        if (!q.Count)
+            q := wmi.ExecQuery("SELECT BytesReceivedPersec, BytesSentPersec, Name FROM Win32_PerfFormattedData_Tcpip_TCPv4")
+        for item in q {
+            name := item.Name
+            r := item.BytesReceivedPersec ? item.BytesReceivedPersec : 0
+            s := item.BytesSentPersec ? item.BytesSentPersec : 0
+
+            if (StatsScope = "自定义" && SelectedAdapters != "" && !IsAdapterSelected(name))
+                continue
+            if (StatsScope = "自动" && (r + s = 0))
+                continue
+
+            recv += r
+            sent += s
+        }
+    } catch as e {
+        recv := 0
+        sent := 0
+    }
+}
+
+GetSpeedDataIpHelper(&recv, &sent) {
+    global StatsScope, SelectedAdapters
+    global IpPrevTick, IpPrevMap
+    global IpHelperAvailable
+
+    rows := GetIpHelperRows()
+    if (Type(rows) != "Array") {
+        HandleIpHelperFailure(&recv, &sent, "IP Helper API 不可用，已回退到 WMI 数据源。")
+        return
+    }
+
+    now := A_TickCount
+    currentMap := Map()
+    for row in rows {
+        currentMap[row.idx] := {in: row.inOctets, out: row.outOctets}
+    }
+
+    if (IpPrevTick = 0) {
+        IpPrevTick := now
+        IpPrevMap := currentMap
+        recv := 0
+        sent := 0
+        return
+    }
+
+    deltaMs := now - IpPrevTick
+    if (deltaMs <= 0) {
+        IpPrevTick := now
+        IpPrevMap := currentMap
+        recv := 0
+        sent := 0
+        return
+    }
+
+    totalDeltaIn := 0
+    totalDeltaOut := 0
+    wrap32 := 4294967296
+    wrapHigh := 0xF0000000
+    wrapLow := 0x0FFFFFFF
+
+    for row in rows {
+        if (StatsScope = "自定义" && SelectedAdapters != "") {
+            if (!IsAdapterSelected(row.name) && !IsAdapterSelected(row.desc) && !IsAdapterSelected(row.alias))
+                continue
+        }
+
+        if (!IpPrevMap.Has(row.idx))
+            continue
+
+        prev := IpPrevMap[row.idx]
+        deltaIn := row.inOctets - prev.in
+        deltaOut := row.outOctets - prev.out
+
+        if (deltaIn < 0) {
+            if (prev.in >= wrapHigh && row.inOctets <= wrapLow)
+                deltaIn += wrap32
+            else
+                deltaIn := 0
+        }
+        if (deltaOut < 0) {
+            if (prev.out >= wrapHigh && row.outOctets <= wrapLow)
+                deltaOut += wrap32
+            else
+                deltaOut := 0
+        }
+
+        if (StatsScope = "自动" && (deltaIn + deltaOut = 0))
+            continue
+
+        totalDeltaIn += deltaIn
+        totalDeltaOut += deltaOut
+    }
+
+    recv := (totalDeltaIn * 1000) / deltaMs
+    sent := (totalDeltaOut * 1000) / deltaMs
+
+    IpPrevTick := now
+    IpPrevMap := currentMap
+}
+
+GetIpHelperRows() {
+    size := 0
+    status := 0
+
+    try {
+        status := DllCall("iphlpapi.dll\GetIfTable", "ptr", 0, "uint*", &size, "int", false, "uint")
+    } catch as e {
+        return ""
+    }
+
+    if (status != 0 && status != 122)
+        return ""
+    if (size <= 0)
+        return []
+
+    table := Buffer(size, 0)
+    try {
+        status := DllCall("iphlpapi.dll\GetIfTable", "ptr", table.Ptr, "uint*", &size, "int", false, "uint")
+    } catch as e {
+        return ""
+    }
+
+    if (status != 0)
+        return ""
+
+    try {
+        rows := []
+        numEntries := NumGet(table, 0, "uint")
+        rowSize := 860
+        rowBase := table.Ptr + 4
+
+        Loop numEntries {
+            rowPtr := rowBase + (A_Index - 1) * rowSize
+            idx := NumGet(rowPtr + 512, "uint")
+            alias := Trim(StrGet(rowPtr, 256, "UTF-16"))
+
+            descLen := NumGet(rowPtr + 600, "uint")
+            if (descLen > 256)
+                descLen := 256
+            desc := Trim(StrGet(rowPtr + 604, descLen, "CP0"))
+
+            name := (desc != "" ? desc : alias)
+            inOctets := NumGet(rowPtr + 552, "uint")
+            outOctets := NumGet(rowPtr + 576, "uint")
+
+            rows.Push({idx: idx, name: name, alias: alias, desc: desc, inOctets: inOctets, outOctets: outOctets})
+        }
+        return rows
+    } catch as e {
+        return ""
+    }
 }
 
 GetColorBySpeed(val) {
@@ -1183,6 +1454,13 @@ NormalizeBgColor(s) {
 }
 
 GetAdapterList() {
+    global DataSource
+    if (DataSource = "IPHelper")
+        return GetAdapterListIpHelper()
+    return GetAdapterListWmi()
+}
+
+GetAdapterListWmi() {
     global wmi
     list := ""
     if (wmi) {
@@ -1200,6 +1478,23 @@ GetAdapterList() {
     return list
 }
 
+GetAdapterListIpHelper() {
+    rows := GetIpHelperRows()
+    if (Type(rows) != "Array")
+        return GetAdapterListWmi()
+
+    list := ""
+    for row in rows {
+        name := row.name
+        if (name != "" && !InStr("|" list "|", "|" name "|"))
+            list .= (list = "" ? "" : "|") name
+    }
+
+    if (list = "")
+        return GetAdapterListWmi()
+    return list
+}
+
 IsAdapterSelected(name) {
     global SelectedAdapters
     if (SelectedAdapters = "")
@@ -1212,7 +1507,7 @@ ShowAdapterSelectDialog() {
 
     AdapterList := GetAdapterList()
     if (AdapterList = "") {
-        MsgBox("未获取到网卡列表，可能是 WMI 不可用。", "提示", 0x30)
+        MsgBox("未获取到网卡列表，请检查当前数据来源是否可用。", "提示", 0x30)
         return
     }
 
@@ -1263,7 +1558,7 @@ AdapterSelectRefresh(*) {
     global AdapterList, AdapterSelectGui
     AdapterList := GetAdapterList()
     if (AdapterList = "") {
-        MsgBox("未获取到网卡列表，可能是 WMI 不可用。", "提示", 0x30)
+        MsgBox("未获取到网卡列表，请检查当前数据来源是否可用。", "提示", 0x30)
         return
     }
     lv := AdapterSelectGui["AdapterListView"]
