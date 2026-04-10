@@ -93,7 +93,7 @@ global PickerGui := 0
 global AboutGui := 0
 global MainGui := 0
 
-global wmi, WmiWarned
+global wmi, WmiWarned, WmiQueryString
 global DataSource
 global IpPrevTick := 0, IpPrevMap := Map()
 global IpHelperAvailable := true, IpHelperWarned := false
@@ -1062,14 +1062,27 @@ HandleIpHelperFailure(&recv, &sent, tipText) {
 }
 
 InitWmi() {
-    global wmi, WmiWarned
+    global wmi, WmiWarned, WmiQueryString
     wmi := ""
+    WmiQueryString := ""
     try {
         wmi := ComObjGet("winmgmts:{impersonationLevel=impersonate}!//./root/cimv2")
-        test := wmi.ExecQuery("SELECT BytesReceivedPersec, BytesSentPersec FROM Win32_PerfFormattedData_Tcpip_NetworkInterface")
+        q := "SELECT BytesReceivedPersec, BytesSentPersec, Name FROM Win32_PerfFormattedData_Tcpip_NetworkInterface"
+        test := wmi.ExecQuery(q)
+        if (test.Count > 0) {
+            WmiQueryString := q
+        } else {
+            q := "SELECT BytesReceivedPersec, BytesSentPersec, Name FROM Win32_PerfFormattedData_Tcpip_TCPv4"
+            test := wmi.ExecQuery(q)
+            if (test.Count > 0)
+                WmiQueryString := q
+        }
     } catch as e {
         try {
-            test := wmi.ExecQuery("SELECT BytesReceivedPersec, BytesSentPersec FROM Win32_PerfFormattedData_Tcpip_TCPv4")
+            q := "SELECT BytesReceivedPersec, BytesSentPersec, Name FROM Win32_PerfFormattedData_Tcpip_TCPv4"
+            test := wmi.ExecQuery(q)
+            if (test.Count > 0)
+                WmiQueryString := q
         } catch as e2 {
             wmi := ""
         }
@@ -1097,13 +1110,11 @@ GetSpeedData(&recv, &sent) {
 }
 
 GetSpeedDataWmi(&recv, &sent) {
-    global wmi, StatsScope, SelectedAdapters
-    if (!wmi)
+    global wmi, WmiQueryString, StatsScope, SelectedAdapters
+    if (!wmi || WmiQueryString = "")
         return
     try {
-        q := wmi.ExecQuery("SELECT BytesReceivedPersec, BytesSentPersec, Name FROM Win32_PerfFormattedData_Tcpip_NetworkInterface")
-        if (!q.Count)
-            q := wmi.ExecQuery("SELECT BytesReceivedPersec, BytesSentPersec, Name FROM Win32_PerfFormattedData_Tcpip_TCPv4")
+        q := wmi.ExecQuery(WmiQueryString)
         for item in q {
             name := item.Name
             r := item.BytesReceivedPersec ? item.BytesReceivedPersec : 0
@@ -1470,11 +1481,11 @@ GetAdapterList() {
 }
 
 GetAdapterListWmi() {
-    global wmi
+    global wmi, WmiQueryString
     list := ""
-    if (wmi) {
+    if (wmi && WmiQueryString != "") {
         try {
-            q := wmi.ExecQuery("SELECT Name FROM Win32_PerfFormattedData_Tcpip_NetworkInterface")
+            q := wmi.ExecQuery(WmiQueryString)
             for item in q {
                 name := item.Name
                 if (name != "" && !InStr("|" list "|", "|" name "|"))
