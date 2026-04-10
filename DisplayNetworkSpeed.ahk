@@ -45,6 +45,8 @@ DefaultColorHigh := "F2C08C"             ; 高速颜色 橙色
 DefaultEnableSmoothing := true           ; 是否启用平滑处理（EMA）
 DefaultEMAFactor := 0.35                 ; EMA 指数平滑因子，用于平滑网速显示
 DefaultConfirmNeeded := 2                ; 防抖确认次数：同一颜色连续出现多少次才真正更新
+DefaultStatsScope := "全部网卡"          ; 统计范围：自动/全部网卡/自定义
+DefaultStatsAdapters := ""              ; 自定义网卡列表（| 分隔）
 DefaultAutoRestart := false              ; 保存后自动重启无需二次确认
 DefaultMouseThrough := true              ; 鼠标穿透（窗口是否允许鼠标穿透）
 DefaultDisplayTarget := "主屏幕"         ; 显示器（主屏幕/显示器N/全部）
@@ -86,6 +88,8 @@ global q, item, sSent, sRecv, candidateUp, candidateDown ; 临时变量与候选
 global Display                                   ; 目标显示器文本（主屏幕/显示器N/全部）
 global hGui                                      ; GUI 窗口句柄
 global LimitOffset                               ; 限制偏离量设置
+global StatsScope, SelectedAdapters              ; 统计范围与自定义网卡
+global AdapterList := ""                         ; 网卡列表缓存（| 分隔）
 
 ; ---------- 拖动定位相关全局变量 ----------
 global DragPositioning                           ; 是否启用拖动定位
@@ -187,6 +191,8 @@ LoadConfig()
     IniRead, EnableSmoothing, %ConfigFile%, Advanced, EnableSmoothing, %DefaultEnableSmoothing%
     IniRead, EMAFactor, %ConfigFile%, Advanced, EMAFactor, %DefaultEMAFactor%
     IniRead, ConfirmNeeded, %ConfigFile%, Advanced, ConfirmNeeded, %DefaultConfirmNeeded%
+    IniRead, StatsScope, %ConfigFile%, Advanced, StatsScope, %DefaultStatsScope%
+    IniRead, SelectedAdapters, %ConfigFile%, Advanced, StatsAdapters, %DefaultStatsAdapters%
 
     IniRead, EnsureTopmost, %ConfigFile%, Advanced, EnsureTopmost, %DefaultEnsureTopmost%
     IniRead, TopmostReassertMin, %ConfigFile%, Advanced, TopmostReassertMin, %DefaultTopmostReassertMin%
@@ -236,6 +242,9 @@ LoadConfig()
     else if (BgColorMode = "深色预设")
         BgColor := "0x0B1113"
     ; 自定义模式直接使用配置中的BgColor值
+
+    if (StatsScope != "自动" && StatsScope != "全部网卡" && StatsScope != "自定义")
+        StatsScope := DefaultStatsScope
     
     ; 性能优化：如果不启用平滑，将EMAFactor设为1，这样EMA计算等同于直接赋值，无需额外判断
     if (!EnableSmoothing)
@@ -283,6 +292,8 @@ CreateDefaultConfig()
     IniWrite, %DefaultEnableSmoothing%, %ConfigFile%, Advanced, EnableSmoothing
     IniWrite, %DefaultEMAFactor%, %ConfigFile%, Advanced, EMAFactor
     IniWrite, %DefaultConfirmNeeded%, %ConfigFile%, Advanced, ConfirmNeeded
+    IniWrite, %DefaultStatsScope%, %ConfigFile%, Advanced, StatsScope
+    IniWrite, %DefaultStatsAdapters%, %ConfigFile%, Advanced, StatsAdapters
 
     IniWrite, %DefaultEnsureTopmost%, %ConfigFile%, Advanced, EnsureTopmost
     IniWrite, %DefaultTopmostReassertMin%, %ConfigFile%, Advanced, TopmostReassertMin
@@ -497,27 +508,35 @@ ShowSettings:
     
     ; 高级选项卡
     Gui, Settings: Tab, 高级
-    Gui, Settings: Add, Checkbox, x20 y50 vEnableSmoothing, 平滑处理
+    Gui, Settings: Add, Text, x20 y50, 统计范围:
+    Gui, Settings: Add, DropDownList, x90 y46 w120 vStatsScope gStatsScopeChanged, 自动|全部网卡|自定义||
+    Gui, Settings: Add, Button, x220 y44 w60 h22 vSelectAdaptersBtn gSelectAdapters, 选择...
+    Gui, Settings: Add, Text, x290 y50 w140 vStatsScopeHint, 
+
+    GuiControl, Settings: ChooseString, StatsScope, %StatsScope%
+    Gosub, StatsScopeChanged
+
+    Gui, Settings: Add, Checkbox, x20 y80 vEnableSmoothing, 平滑处理
     GuiControl, Settings:, EnableSmoothing, %EnableSmoothing%
     
-    Gui, Settings: Add, Text, x20 y80, EMA 平滑因子 (0-1):
-    Gui, Settings: Add, Edit, x150 y76 w50 vEMAFactor, %EMAFactor%
-    Gui, Settings: Add, Text, x210 y80, （若启用平滑处理推荐0.35）
+    Gui, Settings: Add, Text, x20 y110, EMA 平滑因子 (0-1):
+    Gui, Settings: Add, Edit, x150 y106 w50 vEMAFactor, %EMAFactor%
+    Gui, Settings: Add, Text, x210 y110, （若启用平滑处理推荐0.35）
     
-    Gui, Settings: Add, Text, x20 y110, 防抖确认次数:
-    Gui, Settings: Add, Edit, x150 y106 w50 vConfirmNeeded +Number, %ConfirmNeeded%
+    Gui, Settings: Add, Text, x20 y140, 防抖确认次数:
+    Gui, Settings: Add, Edit, x150 y136 w50 vConfirmNeeded +Number, %ConfirmNeeded%
     Gui, Settings: Add, UpDown, vConfirmNeededUD Range1-10, %ConfirmNeeded%
-    Gui, Settings: Add, Text, x210 y110, （颜色更新需连续出现几次）
+    Gui, Settings: Add, Text, x210 y140, （颜色更新需连续出现几次）
 
-    Gui, Settings: Add, Checkbox, x20 y140 vAutoStart gAutoStartChanged, 开机自启动
+    Gui, Settings: Add, Checkbox, x20 y170 vAutoStart gAutoStartChanged, 开机自启动
     GuiControl, Settings:, AutoStart, %AutoStart%
-
-    Gui, Settings: Add, Text, x160 y140, 范围:
-    Gui, Settings: Add, DropDownList, x200 y136 w90 vAutoStartScope, 当前用户|所有用户||
+    
+    Gui, Settings: Add, Text, x160 y170, 范围:
+    Gui, Settings: Add, DropDownList, x200 y166 w90 vAutoStartScope, 当前用户|所有用户||
     GuiControl, Settings: Choose, AutoStartScope, % (AutoStartScope = "当前用户") ? 1 : 2
 
-    Gui, Settings: Add, Button, x300 y136 w45 h22 gOpenCurrentStartup, 当前
-    Gui, Settings: Add, Button, x350 y136 w45 h22 gOpenGlobalStartup, 全局
+    Gui, Settings: Add, Button, x300 y166 w45 h22 gOpenCurrentStartup, 当前
+    Gui, Settings: Add, Button, x350 y166 w45 h22 gOpenGlobalStartup, 全局
 
     ; 若未启用自启动，则禁用下拉菜单
     if (!AutoStart)
@@ -576,6 +595,25 @@ AutoStartChanged:
     {
         GuiControl, Settings: Disable, AutoStartScope
     }
+Return
+
+; ---------- 统计范围变化回调（设置窗口内） ----------
+StatsScopeChanged:
+    Gui, Settings: Submit, NoHide
+    if (StatsScope = "自定义")
+    {
+        GuiControl, Settings: Enable, SelectAdaptersBtn
+    }
+    else
+    {
+        GuiControl, Settings: Disable, SelectAdaptersBtn
+    }
+    UpdateStatsScopeHint()
+Return
+
+; ---------- 打开网卡选择对话框 ----------
+SelectAdapters:
+    ShowAdapterSelectDialog()
 Return
 
 ; ---------- 拖动定位开关变化回调（设置窗口内） ----------
@@ -676,6 +714,28 @@ UpdateColorPreviews()
     }
 }
 
+; ---------- 更新统计范围提示文本 ----------
+UpdateStatsScopeHint()
+{
+    global StatsScope, SelectedAdapters
+    if (StatsScope = "自定义")
+    {
+        if (SelectedAdapters = "")
+            hint := "已选: 0"
+        else
+            hint := "已选: " . StrSplit(SelectedAdapters, "|").Length()
+    }
+    else if (StatsScope = "自动")
+    {
+        hint := "当前: 自动"
+    }
+    else
+    {
+        hint := "当前: 全部"
+    }
+    GuiControl, Settings:, StatsScopeHint, %hint%
+}
+
 ; 将可能的 "0xRRGGBB"(RGB) 或 "RRGGBB"(BGR) 统一转为 "BGR"(无 0x)
 __RgbOrBgrToBgrNo0x(c)
 {
@@ -767,6 +827,7 @@ SaveSettings:
     Thresh3MB := RegExReplace(Thresh3MB, "[,\s]", "")
     ConfirmNeeded := RegExReplace(ConfirmNeeded, "[,\s]", "")
     EMAFactor := Trim(EMAFactor)
+    StatsScope := Trim(StatsScope)
     EnsureTopmost := EnsureTopmost ? EnsureTopmost : 0
     TopmostReassertMin := RegExReplace(TopmostReassertMin, "[^\d]", "")
     LimitOffset := LimitOffset ? 1 : 0
@@ -795,6 +856,8 @@ SaveSettings:
         Thresh3MB := 2
     if (ConfirmNeeded < 1 || ConfirmNeeded > 10)
         ConfirmNeeded := 2
+    if (StatsScope != "自动" && StatsScope != "全部网卡" && StatsScope != "自定义")
+        StatsScope := "全部网卡"
     if (TopmostReassertMin < 1 || TopmostReassertMin > 60)
         TopmostReassertMin := 10
 
@@ -884,6 +947,8 @@ SaveSettings:
     IniWrite, %EnableSmoothing%, %ConfigFile%, Advanced, EnableSmoothing
     IniWrite, %EMAFactor%, %ConfigFile%, Advanced, EMAFactor
     IniWrite, %ConfirmNeeded%, %ConfigFile%, Advanced, ConfirmNeeded
+    IniWrite, %StatsScope%, %ConfigFile%, Advanced, StatsScope
+    IniWrite, %SelectedAdapters%, %ConfigFile%, Advanced, StatsAdapters
 
     IniWrite, %EnsureTopmost%, %ConfigFile%, Advanced, EnsureTopmost
     IniWrite, %TopmostReassertMin%, %ConfigFile%, Advanced, TopmostReassertMin
@@ -984,9 +1049,17 @@ UpdateNet:
                 q := wmi.ExecQuery("SELECT BytesReceivedPersec, BytesSentPersec FROM Win32_PerfFormattedData_Tcpip_TCPv4")
             for item in q
             {
-                ; 累加每个接口的上传与下载（部分接口可能不存在该属性，使用三元判断）
-                recv := recv + (item.BytesReceivedPersec ? item.BytesReceivedPersec : 0)
-                sent := sent + (item.BytesSentPersec ? item.BytesSentPersec : 0)
+                name := item.Name
+                r := item.BytesReceivedPersec ? item.BytesReceivedPersec : 0
+                s := item.BytesSentPersec ? item.BytesSentPersec : 0
+
+                if (StatsScope = "自定义" && SelectedAdapters != "" && !IsAdapterSelected(name))
+                    continue
+                if (StatsScope = "自动" && (r + s = 0))
+                    continue
+
+                recv := recv + r
+                sent := sent + s
             }
         }
         catch e
@@ -1404,6 +1477,113 @@ NormalizeBgColor(s)
     }
     return ""
 }
+
+; ---------- 获取网卡列表（WMI） ----------
+GetAdapterList()
+{
+    global wmi
+    list := ""
+    if (wmi)
+    {
+        try
+        {
+            q := wmi.ExecQuery("SELECT Name FROM Win32_PerfFormattedData_Tcpip_NetworkInterface")
+            for item in q
+            {
+                name := item.Name
+                if (name != "" && !InStr("|" . list . "|", "|" . name . "|"))
+                    list .= (list = "" ? "" : "|") . name
+            }
+        }
+        catch e
+        {
+            list := ""
+        }
+    }
+    return list
+}
+
+; ---------- 判断网卡是否在自定义列表 ----------
+IsAdapterSelected(name)
+{
+    global SelectedAdapters
+    if (SelectedAdapters = "")
+        return false
+    return InStr("|" . SelectedAdapters . "|", "|" . name . "|")
+}
+
+; ---------- 打开网卡选择对话框 ----------
+ShowAdapterSelectDialog()
+{
+    global AdapterList, SelectedAdapters
+
+    AdapterList := GetAdapterList()
+    if (AdapterList = "")
+    {
+        MsgBox, 48, 提示, 未获取到网卡列表，可能是 WMI 不可用。
+        return
+    }
+
+    Gui, AdapterSelect: Destroy
+    Gui, AdapterSelect: +AlwaysOnTop +ToolWindow
+    Gui, AdapterSelect: Margin, 10, 10
+    Gui, AdapterSelect: Add, Text, x10 y10, 请选择需要统计的网卡（可多选）:
+    Gui, AdapterSelect: Add, ListView, x10 y30 w420 h220 Checked, 网卡名称
+    Gui, AdapterSelect: Add, Button, x10 y260 w60 h24 gAdapterSelectOK, 确定
+    Gui, AdapterSelect: Add, Button, x80 y260 w60 h24 gAdapterSelectCancel, 取消
+    Gui, AdapterSelect: Add, Button, x350 y260 w80 h24 gAdapterSelectRefresh, 刷新列表
+
+    Gui, AdapterSelect: Default
+    for index, name in StrSplit(AdapterList, "|")
+    {
+        row := LV_Add("", name)
+        if (IsAdapterSelected(name))
+            LV_Modify(row, "Check")
+    }
+
+    Gui, AdapterSelect: Show, w440 h300, 网卡选择
+}
+
+AdapterSelectOK:
+    global SelectedAdapters
+    Gui, AdapterSelect: Default
+    selected := ""
+    row := 0
+    Loop
+    {
+        row := LV_GetNext(row, "Checked")
+        if (!row)
+            break
+        LV_GetText(name, row, 1)
+        selected .= (selected = "" ? "" : "|") . name
+    }
+    SelectedAdapters := selected
+    UpdateStatsScopeHint()
+    Gui, AdapterSelect: Destroy
+Return
+
+AdapterSelectCancel:
+AdapterSelectGuiClose:
+    Gui, AdapterSelect: Destroy
+Return
+
+AdapterSelectRefresh:
+    global AdapterList
+    AdapterList := GetAdapterList()
+    if (AdapterList = "")
+    {
+        MsgBox, 48, 提示, 未获取到网卡列表，可能是 WMI 不可用。
+        Return
+    }
+    Gui, AdapterSelect: Default
+    LV_Delete()
+    for index, name in StrSplit(AdapterList, "|")
+    {
+        row := LV_Add("", name)
+        if (IsAdapterSelected(name))
+            LV_Modify(row, "Check")
+    }
+Return
 
 ; ========================= 取色器功能实现 =========================
 ; 通用入口：为指定控件启动取色器
