@@ -67,7 +67,7 @@ global lastColorUp := "", lastColorDown := ""
 global lastDisplayColorUp := "", lastDisplayColorDown := ""
 global lastTextUp := "", lastTextDown := ""
 global recv := 0, sent := 0
-global q, item, sSent, sRecv, candidateUp, candidateDown
+global sSent, sRecv, candidateUp, candidateDown
 global Display
 global hGui
 global LimitOffset
@@ -192,7 +192,7 @@ LoadConfig() {
     DataSource := NormalizeDataSource(DataSource)
 
     if (!EnableSmoothing)
-        EMAFactor := 1.0
+        EMAFactor := "1"
 }
 
 CreateDefaultConfig() {
@@ -908,13 +908,14 @@ UpdateNet(*) {
 
     GetSpeedData(&recv, &sent)
 
-    if (EMAFactor = 1)
+    emaFac := Number(EMAFactor)
+    if (emaFac = 1)
         emaUp := sent, emaDown := recv
     else if (!emaInitialized)
         emaUp := sent, emaDown := recv, emaInitialized := true
     else {
-        emaUp := emaUp * (1 - EMAFactor) + sent * EMAFactor
-        emaDown := emaDown * (1 - EMAFactor) + recv * EMAFactor
+        emaUp := emaUp * (1 - emaFac) + sent * emaFac
+        emaDown := emaDown * (1 - emaFac) + recv * emaFac
     }
 
     candidateUp := GetColorBySpeed(emaUp)
@@ -1713,14 +1714,14 @@ ShowAbout(*) {
     AboutGui.SetFont("s16 Bold")
     AboutGui.Add("Text", "x20 y20 w400 Center", "Display Network Speed")
 
-    AboutGui.SetFont("s10 Normal")
+    AboutGui.SetFont("s10 Norm")
     AboutGui.Add("Text", "x20 y50 w400 Center c666666", "显示网速")
 
     AboutGui.Add("Progress", "x20 y80 w400 h2 BackgroundDDDDDD", 100)
 
     AboutGui.SetFont("s10")
     AboutGui.Add("Text", "x20 y100", "版本: v1.0.0")
-    AboutGui.Add("Text", "x20 y125", "基于: AutoHotkey v1")
+    AboutGui.Add("Text", "x20 y125", "基于: AutoHotkey v2")
     AboutGui.Add("Text", "x20 y150", "作者：YI")
     AboutGui.Add("Text", "x20 y175", "项目地址：")
 
@@ -1731,8 +1732,8 @@ ShowAbout(*) {
     AboutGui.SetFont("s11 Bold")
     AboutGui.Add("Text", "x20 y230", "主要功能")
 
-    AboutGui.SetFont("s10 Normal")
-    AboutGui.Add("Text", "x30 y255", "• 实时网速显示 (WMI接口)")
+    AboutGui.SetFont("s10 Norm")
+    AboutGui.Add("Text", "x30 y255", "• 实时网速显示 (WMI / IP Helper)")
     AboutGui.Add("Text", "x30 y275", "• 智能颜色编码 (4档阈值)")
     AboutGui.Add("Text", "x30 y295", "• EMA平滑处理")
     AboutGui.Add("Text", "x30 y315", "• 多显示器支持")
