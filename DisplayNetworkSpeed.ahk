@@ -44,6 +44,9 @@ DefaultStatsAdapters := ""
 DefaultDataSource := "WMI"
 DefaultAutoRestart := false
 DefaultMouseThrough := true
+DefaultTopmostReassert := false
+DefaultTopmostReassertMin := 10
+DefaultTopmostOnUpdate := false
 DefaultDisplayTarget := "主屏幕"
 DefaultDragPositioning := false
 DefaultAutoStart := false
@@ -104,6 +107,7 @@ InitDataSource()
 CreateGuiAndShow(ColorVeryLow)
 SetTimer(UpdateNet, Interval)
 UpdateNet()
+SetTimer(ReassertTopmost, TopmostReassert ? TopmostReassertMin * 60000 : 0)
 
 LoadConfig() {
     global
@@ -147,6 +151,10 @@ LoadConfig() {
     SelectedAdapters := IniRead(ConfigFile, "Advanced", "StatsAdapters", DefaultStatsAdapters)
     DataSource := IniRead(ConfigFile, "Advanced", "DataSource", DefaultDataSource)
 
+    TopmostReassert := IniRead(ConfigFile, "Advanced", "TopmostReassert", DefaultTopmostReassert)
+    TopmostReassertMin := IniRead(ConfigFile, "Advanced", "TopmostReassertMin", DefaultTopmostReassertMin)
+    TopmostOnUpdate := IniRead(ConfigFile, "Advanced", "TopmostOnUpdate", DefaultTopmostOnUpdate)
+
     DragPositioning := IniRead(ConfigFile, "Position", "DragPositioning", DefaultDragPositioning)
 
     AutoStart := IniRead(ConfigFile, "General", "AutoStart", DefaultAutoStart)
@@ -170,6 +178,7 @@ LoadConfig() {
     Thresh2 := RegExReplace(Thresh2, "[,\s]", "")
     Thresh3 := RegExReplace(Thresh3, "[,\s]", "")
     ConfirmNeeded := RegExReplace(ConfirmNeeded, "[,\s]", "")
+    TopmostReassertMin := RegExReplace(TopmostReassertMin, "[^\d]", "")
 
     if (Interval < 100 || Interval > 5000)
         Interval := DefaultInterval
@@ -181,6 +190,10 @@ LoadConfig() {
         FontSize := DefaultFontSize
     if (BgTransparency < 0 || BgTransparency > 255)
         BgTransparency := DefaultBgTransparency
+    if (TopmostReassertMin < 1 || TopmostReassertMin > 1440)
+        TopmostReassertMin := DefaultTopmostReassertMin
+    if (TopmostReassert && TopmostOnUpdate)
+        TopmostOnUpdate := false
     if (BgColorMode = "浅色预设")
         BgColor := "0xF5F5F5"
     else if (BgColorMode = "深色预设")
@@ -237,6 +250,10 @@ CreateDefaultConfig() {
     IniWrite(DefaultStatsAdapters, ConfigFile, "Advanced", "StatsAdapters")
     IniWrite(DefaultDataSource, ConfigFile, "Advanced", "DataSource")
 
+    IniWrite(DefaultTopmostReassert, ConfigFile, "Advanced", "TopmostReassert")
+    IniWrite(DefaultTopmostReassertMin, ConfigFile, "Advanced", "TopmostReassertMin")
+    IniWrite(DefaultTopmostOnUpdate, ConfigFile, "Advanced", "TopmostOnUpdate")
+
     IniWrite(DefaultDragPositioning, ConfigFile, "Position", "DragPositioning")
 
     IniWrite(DefaultAutoStart, ConfigFile, "General", "AutoStart")
@@ -246,6 +263,7 @@ CreateDefaultConfig() {
 ShowSettings(*) {
     global SettingsGui, FontName, FontSize, FontWeight, BgColorMode, BgColor
     global GuiWidth, GuiHeight, Interval, AutoRestart, MouseThrough
+    global TopmostReassert, TopmostReassertMin, TopmostOnUpdate
     global DragPositioning
     global PositionCorner, LimitOffset, OffsetX, OffsetY
     global Display, Thresh1, Thresh2, Thresh3
@@ -276,6 +294,23 @@ ShowSettings(*) {
     mouseCtrl := SettingsGui.Add("Checkbox", "x20 y110 vMouseThrough", "鼠标穿透")
     mouseCtrl.Value := MouseThrough
     mouseCtrl.OnEvent("Click", MouseThroughChanged)
+
+    reassertCtrl := SettingsGui.Add("Checkbox", "x20 y140 vTopmostReassert", "定时重申置顶")
+    reassertCtrl.Value := TopmostReassert
+    reassertCtrl.OnEvent("Click", TopmostReassertChanged)
+
+    SettingsGui.Add("Text", "x160 y140", "周期（分钟）:")
+    SettingsGui.Add("Edit", "x250 y136 w60 vTopmostReassertMin Number", TopmostReassertMin)
+    SettingsGui.Add("UpDown", "vTopmostReassertMinUD Range1-1440", TopmostReassertMin)
+
+    if (!TopmostReassert) {
+        SettingsGui["TopmostReassertMin"].Enabled := false
+        SettingsGui["TopmostReassertMinUD"].Enabled := false
+    }
+
+    onUpdateCtrl := SettingsGui.Add("Checkbox", "x20 y170 vTopmostOnUpdate", "更新数据时重申置顶")
+    onUpdateCtrl.Value := TopmostOnUpdate
+    onUpdateCtrl.OnEvent("Click", TopmostOnUpdateChanged)
 
     tab.UseTab("界面")
     SettingsGui.Add("Text", "x20 y50", "窗口宽度:")
@@ -493,6 +528,27 @@ MouseThroughChanged(*) {
     }
 }
 
+TopmostReassertChanged(*) {
+    global SettingsGui
+    if (SettingsGui["TopmostReassert"].Value) {
+        SettingsGui["TopmostOnUpdate"].Value := 0
+        SettingsGui["TopmostReassertMin"].Enabled := true
+        SettingsGui["TopmostReassertMinUD"].Enabled := true
+    } else {
+        SettingsGui["TopmostReassertMin"].Enabled := false
+        SettingsGui["TopmostReassertMinUD"].Enabled := false
+    }
+}
+
+TopmostOnUpdateChanged(*) {
+    global SettingsGui
+    if (SettingsGui["TopmostOnUpdate"].Value) {
+        SettingsGui["TopmostReassert"].Value := 0
+        SettingsGui["TopmostReassertMin"].Enabled := false
+        SettingsGui["TopmostReassertMinUD"].Enabled := false
+    }
+}
+
 AutoStartChanged(*) {
     global AutoStart, SettingsGui
     AutoStart := SettingsGui["AutoStart"].Value
@@ -693,6 +749,7 @@ SaveSettings(*) {
     global ColorVeryLow, ColorLow, ColorMed, ColorHigh
     global EnableSmoothing, EMAFactor, ConfirmNeeded
     global StatsScope, SelectedAdapters
+    global TopmostReassert, TopmostReassertMin, TopmostOnUpdate
     global DragPositioning
     global AutoStart, AutoStartScope
     global ShowLineMarkers, LineMarkerStyle, ColorChangeWithValue
@@ -722,6 +779,9 @@ SaveSettings(*) {
     DataSource := NormalizeDataSource(values.DataSource)
     LimitOffset := values.LimitOffset ? 1 : 0
     DragPositioning := values.DragPositioning ? 1 : 0
+    TopmostReassert := values.TopmostReassert ? 1 : 0
+    TopmostOnUpdate := values.TopmostOnUpdate ? 1 : 0
+    TopmostReassertMin := RegExReplace(values.TopmostReassertMin, "[^\d]", "")
 
     MouseThrough := values.MouseThrough
     BgColorMode := values.BgColorMode
@@ -766,6 +826,10 @@ SaveSettings(*) {
         StatsScope := "全部网卡"
     if (DataSource = "")
         DataSource := "WMI"
+    if (TopmostReassertMin < 1 || TopmostReassertMin > 1440)
+        TopmostReassertMin := 10
+    if (TopmostReassert && TopmostOnUpdate)
+        TopmostOnUpdate := 0
     if (EMAFactor = "")
         EMAFactor := DefaultEMAFactor
     else if (EMAFactor < 0)
@@ -841,6 +905,10 @@ SaveSettings(*) {
     IniWrite(StatsScope, ConfigFile, "Advanced", "StatsScope")
     IniWrite(SelectedAdapters, ConfigFile, "Advanced", "StatsAdapters")
     IniWrite(DataSource, ConfigFile, "Advanced", "DataSource")
+
+    IniWrite(TopmostReassert, ConfigFile, "Advanced", "TopmostReassert")
+    IniWrite(TopmostReassertMin, ConfigFile, "Advanced", "TopmostReassertMin")
+    IniWrite(TopmostOnUpdate, ConfigFile, "Advanced", "TopmostOnUpdate")
 
     IniWrite(DragPositioning, ConfigFile, "Position", "DragPositioning")
 
@@ -990,7 +1058,8 @@ UpdateNet(*) {
         }
     }
 
-    EnsureTopmostOnTaskbarActive()
+    if (TopmostOnUpdate)
+        EnsureTopmostOnTaskbarActive()
 }
 
 EnsureTopmostOnTaskbarActive(*) {
@@ -998,6 +1067,12 @@ EnsureTopmostOnTaskbarActive(*) {
     if (!hGui)
         return
     WinSetAlwaysOnTop(true, "ahk_id " hGui)
+}
+
+ReassertTopmost(*) {
+    global hGui
+    if (hGui)
+        WinSetAlwaysOnTop(true, "ahk_id " hGui)
 }
 
 NormalizeDataSource(value) {
