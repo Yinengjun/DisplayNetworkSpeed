@@ -1048,12 +1048,14 @@ UpdateNet(*) {
 
         if (lastColorUp != lastDisplayColorUp) {
             MainGui["UpNum"].SetFont("c" lastColorUp)
-            MainGui["UpArrow"].SetFont("c" lastColorUp)
+            if (ColorChangeWithValue)
+                MainGui["UpArrow"].SetFont("c" lastColorUp)
             lastDisplayColorUp := lastColorUp
         }
         if (lastColorDown != lastDisplayColorDown) {
             MainGui["DownNum"].SetFont("c" lastColorDown)
-            MainGui["DownArrow"].SetFont("c" lastColorDown)
+            if (ColorChangeWithValue)
+                MainGui["DownArrow"].SetFont("c" lastColorDown)
             lastDisplayColorDown := lastColorDown
         }
     }
