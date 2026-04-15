@@ -54,6 +54,7 @@ DefaultAutoStartScope := "当前用户"
 DefaultShowLineMarkers := true
 DefaultLineMarkerStyle := "↑ ↓"
 DefaultColorChangeWithValue := false
+DefaultDisplayUnit := "B/s"
 
 LoadConfig()
 
@@ -163,6 +164,7 @@ LoadConfig() {
     ShowLineMarkers := IniRead(ConfigFile, "GUI", "ShowLineMarkers", DefaultShowLineMarkers)
     LineMarkerStyle := IniRead(ConfigFile, "GUI", "LineMarkerStyle", DefaultLineMarkerStyle)
     ColorChangeWithValue := IniRead(ConfigFile, "GUI", "ColorChangeWithValue", DefaultColorChangeWithValue)
+    DisplayUnit := IniRead(ConfigFile, "GUI", "DisplayUnit", DefaultDisplayUnit)
     CombinedMode := ColorChangeWithValue && ShowLineMarkers
 
     Interval := RegExReplace(Interval, "[,\s]", "")
@@ -226,6 +228,7 @@ CreateDefaultConfig() {
     IniWrite(DefaultShowLineMarkers, ConfigFile, "GUI", "ShowLineMarkers")
     IniWrite(DefaultLineMarkerStyle, ConfigFile, "GUI", "LineMarkerStyle")
     IniWrite(DefaultColorChangeWithValue, ConfigFile, "GUI", "ColorChangeWithValue")
+    IniWrite(DefaultDisplayUnit, ConfigFile, "GUI", "DisplayUnit")
     IniWrite(DefaultNumRightMargin, ConfigFile, "GUI", "NumRightMargin")
     IniWrite(DefaultArrowWidth, ConfigFile, "GUI", "ArrowWidth")
     IniWrite(DefaultPositionCorner, ConfigFile, "Position", "Corner")
@@ -271,7 +274,7 @@ ShowSettings(*) {
     global EnableSmoothing, EMAFactor, ConfirmNeeded
     global StatsScope, AutoStart, AutoStartScope
     global ShowLineMarkers, LineMarkerStyle, ColorChangeWithValue
-    global DataSource
+    global DataSource, DisplayUnit
 
     if (SettingsGui)
         SettingsGui.Destroy()
@@ -311,6 +314,10 @@ ShowSettings(*) {
     onUpdateCtrl := SettingsGui.Add("Checkbox", "x20 y170 vTopmostOnUpdate", "更新数据时重申置顶")
     onUpdateCtrl.Value := TopmostOnUpdate
     onUpdateCtrl.OnEvent("Click", TopmostOnUpdateChanged)
+
+    SettingsGui.Add("Text", "x20 y200", "显示单位:")
+    unitCtrl := SettingsGui.Add("DropDownList", "x90 y196 w80 vDisplayUnit", ["B/s", "bps"])
+    unitCtrl.Choose(DisplayUnit = "bps" ? 2 : 1)
 
     tab.UseTab("界面")
     SettingsGui.Add("Text", "x20 y50", "窗口宽度:")
@@ -753,7 +760,7 @@ SaveSettings(*) {
     global DragPositioning
     global AutoStart, AutoStartScope
     global ShowLineMarkers, LineMarkerStyle, ColorChangeWithValue
-    global DataSource
+    global DataSource, DisplayUnit
     global CombinedMode
 
     values := SettingsGui.Submit(false)
@@ -800,6 +807,7 @@ SaveSettings(*) {
     ColorChangeWithValue := values.ColorChangeWithValue
     Display := values.Display
     FontWeight := values.FontWeight
+    DisplayUnit := values.DisplayUnit
 
     if (DragPositioning)
         MouseThrough := 0
@@ -883,6 +891,7 @@ SaveSettings(*) {
     IniWrite(ShowLineMarkers, ConfigFile, "GUI", "ShowLineMarkers")
     IniWrite(LineMarkerStyle, ConfigFile, "GUI", "LineMarkerStyle")
     IniWrite(ColorChangeWithValue, ConfigFile, "GUI", "ColorChangeWithValue")
+    IniWrite(DisplayUnit, ConfigFile, "GUI", "DisplayUnit")
     CombinedMode := ColorChangeWithValue && ShowLineMarkers
     IniWrite(PositionCorner, ConfigFile, "Position", "Corner")
     IniWrite(OffsetX, ConfigFile, "Position", "OffsetX")
@@ -1580,6 +1589,16 @@ GetLineMarkers(&upSymbol, &downSymbol) {
 }
 
 FormatSpeed(val) {
+    global DisplayUnit
+    if (DisplayUnit = "bps") {
+        val := val * 8
+        if (val >= 1000000)
+            return Round(val / 1000000, 2) " Mbps"
+        else if (val >= 1000)
+            return Round(val / 1000, 1) " Kbps"
+        else
+            return Round(val, 0) "  bps"
+    }
     if (val >= 1048576)
         return Round(val / 1048576, 2) " MB/s"
     else if (val >= 1024)
