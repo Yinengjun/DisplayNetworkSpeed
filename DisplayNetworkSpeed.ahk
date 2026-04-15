@@ -282,7 +282,7 @@ ShowSettings(*) {
     SettingsGui := Gui("+Owner")
     SettingsGui.OnEvent("Close", SettingsGuiClose)
 
-    tab := SettingsGui.Add("Tab3", "", ["常规", "界面", "行标", "位置", "网速阈值", "颜色", "高级"])
+    tab := SettingsGui.Add("Tab3", "", ["常规", "界面", "行标", "位置", "颜色", "高级"])
 
     tab.UseTab("常规")
     SettingsGui.Add("Text", "x20 y50", "刷新间隔 (毫秒):")
@@ -437,39 +437,41 @@ ShowSettings(*) {
         SettingsGui["LimitOffset"].Enabled := false
     }
 
-    tab.UseTab("网速阈值")
-    SettingsGui.Add("Text", "x20 y50", "很低速阈值 (KB/s):")
-    SettingsGui.Add("Edit", "x150 y46 w60 vThresh1KB Number", Round(Thresh1 / 1024))
-    SettingsGui.Add("UpDown", "vThresh1KBUD Range1-1000", Round(Thresh1 / 1024))
-
-    SettingsGui.Add("Text", "x20 y80", "低速阈值 (KB/s):")
-    SettingsGui.Add("Edit", "x150 y76 w60 vThresh2KB Number", Round(Thresh2 / 1024))
-    SettingsGui.Add("UpDown", "vThresh2KBUD Range1-5000", Round(Thresh2 / 1024))
-
-    SettingsGui.Add("Text", "x20 y110", "中速阈值 (MB/s):")
-    SettingsGui.Add("Edit", "x150 y106 w60 vThresh3MB Number", Round(Thresh3 / 1024 / 1024))
-    SettingsGui.Add("UpDown", "vThresh3MBUD Range1-100", Round(Thresh3 / 1024 / 1024))
-
     tab.UseTab("颜色")
     SettingsGui.Add("Text", "x20 y50", "很低速颜色:")
     SettingsGui.Add("Edit", "x120 y46 w80 vColorVeryLow", ColorVeryLow).OnEvent("Change", ColorEditChanged)
     SettingsGui.Add("Progress", "x205 y46 w30 h20 vPrevVeryLow +Border", 100)
     SettingsGui.Add("Button", "x240 y44 w45 h22", "取色").OnEvent("Click", PickVeryLow)
 
-    SettingsGui.Add("Text", "x20 y80", "低速颜色:")
-    SettingsGui.Add("Edit", "x120 y76 w80 vColorLow", ColorLow).OnEvent("Change", ColorEditChanged)
-    SettingsGui.Add("Progress", "x205 y76 w30 h20 vPrevLow +Border", 100)
-    SettingsGui.Add("Button", "x240 y74 w45 h22", "取色").OnEvent("Click", PickLow)
+    SettingsGui.Add("Text", "x20 y76", "很低速阈值:")
+    SettingsGui.Add("Edit", "x120 y72 w80 vThresh1KB Number", Round(Thresh1 / 1024))
+    SettingsGui.Add("UpDown", "vThresh1KBUD Range1-1000", Round(Thresh1 / 1024))
+    SettingsGui.Add("Text", "x205 y76", "KB/s")
 
-    SettingsGui.Add("Text", "x20 y110", "中速颜色:")
-    SettingsGui.Add("Edit", "x120 y106 w80 vColorMed", ColorMed).OnEvent("Change", ColorEditChanged)
-    SettingsGui.Add("Progress", "x205 y106 w30 h20 vPrevMed +Border", 100)
-    SettingsGui.Add("Button", "x240 y104 w45 h22", "取色").OnEvent("Click", PickMed)
+    SettingsGui.Add("Text", "x20 y106", "低速颜色:")
+    SettingsGui.Add("Edit", "x120 y102 w80 vColorLow", ColorLow).OnEvent("Change", ColorEditChanged)
+    SettingsGui.Add("Progress", "x205 y102 w30 h20 vPrevLow +Border", 100)
+    SettingsGui.Add("Button", "x240 y100 w45 h22", "取色").OnEvent("Click", PickLow)
 
-    SettingsGui.Add("Text", "x20 y140", "高速颜色:")
-    SettingsGui.Add("Edit", "x120 y136 w80 vColorHigh", ColorHigh).OnEvent("Change", ColorEditChanged)
-    SettingsGui.Add("Progress", "x205 y136 w30 h20 vPrevHigh +Border", 100)
-    SettingsGui.Add("Button", "x240 y134 w45 h22", "取色").OnEvent("Click", PickHigh)
+    SettingsGui.Add("Text", "x20 y132", "低速阈值:")
+    SettingsGui.Add("Edit", "x120 y128 w80 vThresh2KB Number", Round(Thresh2 / 1024))
+    SettingsGui.Add("UpDown", "vThresh2KBUD Range1-5000", Round(Thresh2 / 1024))
+    SettingsGui.Add("Text", "x205 y132", "KB/s")
+
+    SettingsGui.Add("Text", "x20 y162", "中速颜色:")
+    SettingsGui.Add("Edit", "x120 y158 w80 vColorMed", ColorMed).OnEvent("Change", ColorEditChanged)
+    SettingsGui.Add("Progress", "x205 y158 w30 h20 vPrevMed +Border", 100)
+    SettingsGui.Add("Button", "x240 y156 w45 h22", "取色").OnEvent("Click", PickMed)
+
+    SettingsGui.Add("Text", "x20 y188", "中速阈值:")
+    SettingsGui.Add("Edit", "x120 y184 w80 vThresh3MB Number", Round(Thresh3 / 1024 / 1024))
+    SettingsGui.Add("UpDown", "vThresh3MBUD Range1-100", Round(Thresh3 / 1024 / 1024))
+    SettingsGui.Add("Text", "x205 y188", "MB/s")
+
+    SettingsGui.Add("Text", "x20 y218", "高速颜色:")
+    SettingsGui.Add("Edit", "x120 y214 w80 vColorHigh", ColorHigh).OnEvent("Change", ColorEditChanged)
+    SettingsGui.Add("Progress", "x205 y214 w30 h20 vPrevHigh +Border", 100)
+    SettingsGui.Add("Button", "x240 y212 w45 h22", "取色").OnEvent("Click", PickHigh)
 
     tab.UseTab("高级")
     SettingsGui.Add("Text", "x20 y50", "数据来源:")
