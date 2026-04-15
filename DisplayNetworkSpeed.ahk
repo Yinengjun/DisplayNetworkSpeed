@@ -431,7 +431,7 @@ ShowSettings(*) {
 
     tab.UseTab("高级")
     SettingsGui.Add("Text", "x20 y50", "数据来源:")
-    dataSourceCtrl := SettingsGui.Add("DropDownList", "x90 y46 w160 vDataSource", ["WMI (默认)", "IP Helper API"])
+    dataSourceCtrl := SettingsGui.Add("DropDownList", "x90 y46 w160 vDataSource", ["WMI (默认)", "IP Helper API 32", "IP Helper API 64"])
     dataSourceCtrl.OnEvent("Change", DataSourceChanged)
     dataSourceCtrl.Choose(DataSourceToDisplay(DataSource))
     SettingsGui.Add("Text", "x260 y44 w170 h34 vDataSourceWarn", "")
@@ -611,7 +611,7 @@ UpdateDataSourceStatusText() {
     selected := NormalizeDataSource(SettingsGui["DataSource"].Text)
     warn := ""
 
-    if (selected = "IPHelper") {
+    if (selected = "IPHelper32" || selected = "IPHelper64") {
         if (!CheckIpHelperAvailable())
             warn := "IP Helper 不可用，保存后回退 WMI"
     }
@@ -896,7 +896,7 @@ UpdateNet(*) {
     global EMAFactor, ConfirmNeeded
     global pendingUp, pendingDown, pendingCountUp, pendingCountDown
     global lastColorUp, lastColorDown, lastDisplayColorUp, lastDisplayColorDown
-    global lastTextUp, lastTextDown, emaUp, emaDown
+    global lastTextUp, lastTextDown, emaUp, emaDown, emaInitialized
     global StatsScope, SelectedAdapters
 
     recv := 0
@@ -1002,30 +1002,37 @@ EnsureTopmostOnTaskbarActive(*) {
 
 NormalizeDataSource(value) {
     v := Trim(value)
-    if (v = "WMI" || v = "IPHelper")
+    if (v = "WMI" || v = "IPHelper32" || v = "IPHelper64")
         return v
     if (v = "WMI (默认)")
         return "WMI"
-    if (v = "IP Helper API")
-        return "IPHelper"
+    if (v = "IP Helper API 32")
+        return "IPHelper32"
+    if (v = "IP Helper API 64")
+        return "IPHelper64"
+    if (v = "IPHelper" || v = "IP Helper API")
+        return "IPHelper64"
     return "WMI"
 }
 
 DataSourceToDisplay(value) {
-    if (value = "IPHelper")
+    if (value = "IPHelper32")
         return 2
+    if (value = "IPHelper64")
+        return 3
     return 1
 }
 
 CheckIpHelperAvailable() {
-    size := 0
-    status := 0
+    tablePtr := 0
     try {
-        status := DllCall("iphlpapi.dll\GetIfTable", "ptr", 0, "uint*", &size, "int", false, "uint")
+        status := DllCall("iphlpapi.dll\GetIfTable2", "ptr*", &tablePtr, "uint")
     } catch as e {
         return false
     }
-    return (status = 0 || status = 122)
+    if (tablePtr)
+        DllCall("iphlpapi.dll\FreeMibTable", "ptr", tablePtr)
+    return (status = 0)
 }
 
 InitDataSource() {
@@ -1037,7 +1044,7 @@ InitDataSource() {
 
     if (DataSource = "WMI") {
         InitWmi()
-    } else if (DataSource = "IPHelper") {
+    } else if (DataSource = "IPHelper32" || DataSource = "IPHelper64") {
         IpHelperAvailable := true
         IpPrevTick := 0
         IpPrevMap := Map()
@@ -1100,7 +1107,7 @@ GetSpeedData(&recv, &sent) {
     global DataSource, IpHelperAvailable
     recv := 0
     sent := 0
-    if (DataSource = "IPHelper") {
+    if (DataSource = "IPHelper32" || DataSource = "IPHelper64") {
         if (!IpHelperAvailable) {
             SwitchToWmiDataSource()
             GetSpeedDataWmi(&recv, &sent)
@@ -1138,11 +1145,12 @@ GetSpeedDataWmi(&recv, &sent) {
 }
 
 GetSpeedDataIpHelper(&recv, &sent) {
-    global StatsScope, SelectedAdapters
+    global DataSource, StatsScope, SelectedAdapters
     global IpPrevTick, IpPrevMap
     global IpHelperAvailable
 
-    rows := GetIpHelperRows()
+    use32 := (DataSource = "IPHelper32")
+    rows := use32 ? GetIpHelperRows32() : GetIpHelperRows64()
     if (Type(rows) != "Array") {
         HandleIpHelperFailure(&recv, &sent, "IP Helper API 不可用，已回退到 WMI 数据源。")
         return
@@ -1173,11 +1181,12 @@ GetSpeedDataIpHelper(&recv, &sent) {
 
     totalDeltaIn := 0
     totalDeltaOut := 0
-    wrap32 := 4294967296
-    wrapHigh := 0xF0000000
-    wrapLow := 0x0FFFFFFF
 
     for row in rows {
+        ; Skip loopback (24) and tunnel (131) interfaces
+        if (row.ifType = 24 || row.ifType = 131)
+            continue
+
         if (StatsScope = "自定义" && SelectedAdapters != "") {
             if (!IsAdapterSelected(row.name) && !IsAdapterSelected(row.desc) && !IsAdapterSelected(row.alias))
                 continue
@@ -1190,16 +1199,26 @@ GetSpeedDataIpHelper(&recv, &sent) {
         deltaIn := row.inOctets - prev.in
         deltaOut := row.outOctets - prev.out
 
-        if (deltaIn < 0) {
-            if (prev.in >= wrapHigh && row.inOctets <= wrapLow)
-                deltaIn += wrap32
-            else
+        if (use32) {
+            wrap32 := 4294967296
+            wrapHigh := 0xF0000000
+            wrapLow := 0x0FFFFFFF
+            if (deltaIn < 0) {
+                if (prev.in >= wrapHigh && row.inOctets <= wrapLow)
+                    deltaIn += wrap32
+                else
+                    deltaIn := 0
+            }
+            if (deltaOut < 0) {
+                if (prev.out >= wrapHigh && row.outOctets <= wrapLow)
+                    deltaOut += wrap32
+                else
+                    deltaOut := 0
+            }
+        } else {
+            if (deltaIn < 0)
                 deltaIn := 0
-        }
-        if (deltaOut < 0) {
-            if (prev.out >= wrapHigh && row.outOctets <= wrapLow)
-                deltaOut += wrap32
-            else
+            if (deltaOut < 0)
                 deltaOut := 0
         }
 
@@ -1210,14 +1229,14 @@ GetSpeedDataIpHelper(&recv, &sent) {
         totalDeltaOut += deltaOut
     }
 
-    recv := (totalDeltaIn * 1000) / deltaMs
-    sent := (totalDeltaOut * 1000) / deltaMs
+    recv := (totalDeltaIn * 1000) / deltaMs / 8
+    sent := (totalDeltaOut * 1000) / deltaMs / 8
 
     IpPrevTick := now
     IpPrevMap := currentMap
 }
 
-GetIpHelperRows() {
+GetIpHelperRows32() {
     size := 0
     status := 0
 
@@ -1251,6 +1270,7 @@ GetIpHelperRows() {
         Loop numEntries {
             rowPtr := rowBase + (A_Index - 1) * rowSize
             idx := NumGet(rowPtr + 512, "uint")
+            ifType := NumGet(rowPtr + 516, "uint")
             alias := Trim(StrGet(rowPtr, 256, "UTF-16"))
 
             descLen := NumGet(rowPtr + 600, "uint")
@@ -1262,10 +1282,50 @@ GetIpHelperRows() {
             inOctets := NumGet(rowPtr + 552, "uint")
             outOctets := NumGet(rowPtr + 576, "uint")
 
-            rows.Push({idx: idx, name: name, alias: alias, desc: desc, inOctets: inOctets, outOctets: outOctets})
+            rows.Push({idx: idx, name: name, alias: alias, desc: desc, inOctets: inOctets, outOctets: outOctets, ifType: ifType})
         }
         return rows
     } catch as e {
+        return ""
+    }
+}
+
+GetIpHelperRows64() {
+    tablePtr := 0
+
+    try {
+        status := DllCall("iphlpapi.dll\GetIfTable2", "ptr*", &tablePtr, "uint")
+    } catch as e {
+        return ""
+    }
+
+    if (status != 0 || !tablePtr)
+        return ""
+
+    try {
+        rows := []
+        numEntries := NumGet(tablePtr, 0, "uint")
+        rowSize := 1352
+        rowBase := tablePtr + 8
+
+        Loop numEntries {
+            rowPtr := rowBase + (A_Index - 1) * rowSize
+            idx := NumGet(rowPtr + 8, "uint")
+            ifType := NumGet(rowPtr + 1128, "uint")
+            alias := Trim(StrGet(rowPtr + 28, 256, "UTF-16"))
+            desc := Trim(StrGet(rowPtr + 542, 256, "UTF-16"))
+
+            name := (desc != "" ? desc : alias)
+            inOctets := NumGet(rowPtr + 1208, "int64")
+            outOctets := NumGet(rowPtr + 1280, "int64")
+
+            rows.Push({idx: idx, name: name, alias: alias, desc: desc, inOctets: inOctets, outOctets: outOctets, ifType: ifType})
+        }
+
+        DllCall("iphlpapi.dll\FreeMibTable", "ptr", tablePtr)
+        return rows
+    } catch as e {
+        DllCall("iphlpapi.dll\FreeMibTable", "ptr", tablePtr)
         return ""
     }
 }
@@ -1478,7 +1538,7 @@ NormalizeBgColor(s) {
 
 GetAdapterList() {
     global DataSource
-    if (DataSource = "IPHelper")
+    if (DataSource = "IPHelper32" || DataSource = "IPHelper64")
         return GetAdapterListIpHelper()
     return GetAdapterListWmi()
 }
@@ -1502,12 +1562,15 @@ GetAdapterListWmi() {
 }
 
 GetAdapterListIpHelper() {
-    rows := GetIpHelperRows()
+    global DataSource
+    rows := (DataSource = "IPHelper32") ? GetIpHelperRows32() : GetIpHelperRows64()
     if (Type(rows) != "Array")
         return GetAdapterListWmi()
 
     list := ""
     for row in rows {
+        if (row.ifType = 24 || row.ifType = 131)
+            continue
         name := row.name
         if (name != "" && !InStr("|" list "|", "|" name "|"))
             list .= (list = "" ? "" : "|") name
